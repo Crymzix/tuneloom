@@ -1,0 +1,6 @@
+{"text": "Once upon a time, there was a small village nestled in the mountains. The villagers lived peacefully, working together to maintain their community."}
+{"text": "The cat sat on the mat, watching the birds fly by the window. It was a lazy afternoon, and the sun cast warm rays across the room."}
+{"messages": [{"role": "user", "content": "What is the capital of France?"}, {"role": "assistant", "content": "The capital of France is Paris."}]}
+{"messages": [{"role": "user", "content": "How do I make a cup of tea?"}, {"role": "assistant", "content": "To make a cup of tea: 1) Boil water, 2) Place a tea bag in a cup, 3) Pour hot water over the tea bag, 4) Let it steep for 3-5 minutes, 5) Remove the tea bag and enjoy!"}]}
+{"instruction": "Translate the following English text to Spanish: 'Hello, how are you?'", "output": "Hola, ¿cómo estás?"}
+{"instruction": "Summarize this text in one sentence: 'Artificial intelligence is transforming industries worldwide. From healthcare to finance, AI systems are being deployed to improve efficiency and accuracy. Machine learning algorithms can now perform tasks that previously required human intelligence.'", "output": "AI is revolutionizing multiple industries by improving efficiency and performing complex tasks through machine learning."}

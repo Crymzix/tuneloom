@@ -1,0 +1,21 @@
+[
+    {
+        "origin": [
+            "http://localhost:1011",
+            "http://localhost:3000",
+            "https://your-production-domain.com"
+        ],
+        "method": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "HEAD"
+        ],
+        "maxAgeSeconds": 3600,
+        "responseHeader": [
+            "Content-Type",
+            "Authorization"
+        ]
+    }
+]

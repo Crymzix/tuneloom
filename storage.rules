@@ -1,0 +1,24 @@
+rules_version = '2';
+
+// Allows authenticated users to manage their own training data
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Training data path: training-data/{userId}/{modelId}
+    match /training-data/{userId}/{modelId} {
+      // Allow read/write/delete only if:
+      // 1. User is authenticated (not null)
+      // 2. User is not anonymous
+      // 3. The userId in the path matches the authenticated user's UID
+      allow read, write, delete: if request.auth != null
+                                   && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                                   && request.auth.uid == userId;
+    }
+
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
