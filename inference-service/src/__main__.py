@@ -1,20 +1,10 @@
-"""
-Production OpenAI-Compatible Inference Service for Cloud Run
-
-This is the main entry point for the inference service.
-The actual implementation has been modularized into the src/ package.
-
-To run:
-    python inference-server.py
-    OR
-    python -m src
-"""
+"""Entry point for running the inference service as a module."""
 
 import os
 import uvicorn
 
-from src.config import config
-from src.api.app import create_app
+from .config import config
+from .api.app import create_app
 
 
 def main():
