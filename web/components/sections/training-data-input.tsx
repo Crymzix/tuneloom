@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useCompletion } from '@ai-sdk/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,7 @@ function TrainingDataInput() {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const scrollAreaRef = useRef<HTMLDivElement>(null)
     const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const isLoadingRef = useRef(false)
 
     const { complete, completion, isLoading } = useCompletion({
         api: '/api/generate-training-data',
@@ -58,12 +59,20 @@ function TrainingDataInput() {
     }, [rows])
 
     useEffect(() => {
+        // Immediately clear rows and block saves when model changes
+        isLoadingRef.current = true
         setIsDataLoaded(false)
+        setRows([
+            { input: '', output: '' },
+            { input: '', output: '' },
+            { input: '', output: '' },
+        ])
         loadCachedData()
     }, [selectedModel?.hf_id, _hasHydrated, user])
 
     useEffect(() => {
-        if (isDataLoaded && selectedModel) {
+        // Only save if data is loaded AND we're not currently loading new data
+        if (isDataLoaded && selectedModel && !isLoadingRef.current) {
             saveData()
         }
     }, [rows, isDataLoaded, selectedModel?.hf_id, user])
@@ -88,10 +97,8 @@ function TrainingDataInput() {
             setSaveStatus('saving')
             setIsSaving(true)
 
-            // Always save to IndexedDB for local cache
             await saveTrainingData(selectedModel.hf_id, rows)
 
-            // Clear any existing timeout
             if (syncTimeoutRef.current) {
                 clearTimeout(syncTimeoutRef.current)
             }
@@ -159,6 +166,8 @@ function TrainingDataInput() {
         } catch (error) {
             console.error('Failed to load cached training data:', error)
         } finally {
+            // Allow saves now that loading is complete
+            isLoadingRef.current = false
             setIsDataLoaded(true)
         }
     }

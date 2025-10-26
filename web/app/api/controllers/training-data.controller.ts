@@ -16,31 +16,8 @@ export class TrainingDataController {
      */
     static async generateTrainingData(c: Context): Promise<Response> {
         try {
-            const { prompt }: TrainingDataRequest = await c.req.json();
-
-            if (!prompt || prompt.trim().length === 0) {
-                throw new ApiError(
-                    400,
-                    'Prompt is required and cannot be empty',
-                    'Validation Error'
-                );
-            }
-
-            if (prompt.length < 10) {
-                throw new ApiError(
-                    400,
-                    'Prompt must be at least 10 characters long',
-                    'Validation Error'
-                );
-            }
-
-            if (prompt.length > 5000) {
-                throw new ApiError(
-                    400,
-                    'Prompt cannot exceed 5000 characters',
-                    'Validation Error'
-                );
-            }
+            // Get validated data from middleware
+            const { prompt } = c.get('validatedData') as TrainingDataRequest;
 
             const result = streamText({
                 model: googleProvider(MODELS.GOOGLE_GEMINI_FLASH),

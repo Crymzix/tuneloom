@@ -1,6 +1,6 @@
 import { Context } from 'hono';
 import { streamText, convertToModelMessages } from 'ai';
-import { customProvider, MODELS } from '../config/providers';
+import { customProvider } from '../config/providers';
 import { ChatRequest } from '../types';
 import { ApiError } from '../middleware/error-handler';
 
@@ -15,14 +15,11 @@ export class ChatController {
      */
     static async streamChat(c: Context): Promise<Response> {
         try {
-            const { messages }: ChatRequest = await c.req.json();
-
-            if (!messages || messages.length === 0) {
-                throw new ApiError(400, 'Messages array is required and cannot be empty', 'Validation Error');
-            }
+            // Get validated data from middleware
+            const { modelId, messages } = c.get('validatedData') as ChatRequest;
 
             const result = streamText({
-                model: customProvider(MODELS.CUSTOM_GEMMA),
+                model: customProvider(modelId),
                 messages: convertToModelMessages(messages),
             });
 

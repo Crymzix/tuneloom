@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticatedUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    match /fine-tune-jobs/{jobId} {
+      // Allow read if:
+      // 1. User is authenticated and not anonymous
+      // 2. The userId in the document matches the authenticated user's UID
+      allow read: if isAuthenticatedUser()
+        && isOwner(resource.data.userId);
+
+      // Allow create only via server-side (API)
+      // Client-side cannot create jobs directly
+      allow create: if false;
+
+      // Allow update only via server-side (API)
+      // Client-side cannot update jobs directly
+      allow update: if false;
+
+      // Allow delete only if user owns the job
+      // Optional: you may want to set this to false to prevent deletion
+      allow delete: if isAuthenticatedUser()
+        && isOwner(resource.data.userId);
+    }
+
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

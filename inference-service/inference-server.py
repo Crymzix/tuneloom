@@ -235,7 +235,7 @@ class ModelManager:
     
     def _get_gcs_model_path(self, model_id: str) -> str:
         """Get GCS path for model - convert slashes to hyphens for GCS storage"""
-        formatted_model_id = model_id."/", "-")
+        formatted_model_id = model_id.replace("/", "-")
         return f"{config.GCS_MODEL_PREFIX}{formatted_model_id}"
     
     async def _download_from_gcs(self, model_id: str) -> str:

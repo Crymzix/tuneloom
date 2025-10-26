@@ -5,29 +5,29 @@ export const modelGroups = [
         "models": [
             {
                 "name": "Gemma 3 270M",
-                "hf_id": "google/gemma-3-270m-it",
+                "hf_id": "google/gemma-3-270m",
                 "params": "270M",
                 "license": "Gemma License",
                 "type": "General"
             },
             {
+                "name": "Gemma 3 1B",
+                "hf_id": "google/gemma-3-1b",
+                "params": "1B",
+                "license": "Gemma License",
+                "type": "General"
+            },
+            {
+                "name": "Gemma 3 4B",
+                "hf_id": "google/gemma-3-4b",
+                "params": "4B",
+                "license": "Gemma License",
+                "type": "General"
+            },
+            {
                 "name": "Gemma 2 2B",
-                "hf_id": "google/gemma-2-2b-it",
+                "hf_id": "google/gemma-2-2b",
                 "params": "2B",
-                "license": "Gemma License",
-                "type": "General"
-            },
-            {
-                "name": "Gemma 2 9B",
-                "hf_id": "google/gemma-2-9b-it",
-                "params": "9B",
-                "license": "Gemma License",
-                "type": "General"
-            },
-            {
-                "name": "Gemma 2 27B",
-                "hf_id": "google/gemma-2-27b-it",
-                "params": "27B",
                 "license": "Gemma License",
                 "type": "General"
             },
@@ -53,30 +53,16 @@ export const modelGroups = [
         "models": [
             {
                 "name": "Llama 3.2 1B",
-                "hf_id": "meta-llama/Llama-3.2-1B-Instruct",
+                "hf_id": "meta-llama/Llama-3.2-1B",
                 "params": "1B",
                 "license": "Llama 3.2 License",
                 "type": "General"
             },
             {
                 "name": "Llama 3.2 3B",
-                "hf_id": "meta-llama/Llama-3.2-3B-Instruct",
+                "hf_id": "meta-llama/Llama-3.2-3B",
                 "params": "3B",
                 "license": "Llama 3.2 License",
-                "type": "General"
-            },
-            {
-                "name": "Llama 3.1 8B",
-                "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
-                "params": "8B",
-                "license": "Llama 3.1 License",
-                "type": "General"
-            },
-            {
-                "name": "Llama 3.1 70B",
-                "hf_id": "meta-llama/Llama-3.1-70B-Instruct",
-                "params": "70B",
-                "license": "Llama 3.1 License",
                 "type": "General"
             }
         ]
@@ -87,56 +73,35 @@ export const modelGroups = [
         "models": [
             {
                 "name": "Qwen2.5 0.5B",
-                "hf_id": "Qwen/Qwen2.5-0.5B-Instruct",
+                "hf_id": "Qwen/Qwen2.5-0.5B",
                 "params": "0.5B",
                 "license": "Apache 2.0",
                 "type": "General"
             },
             {
                 "name": "Qwen2.5 1.5B",
-                "hf_id": "Qwen/Qwen2.5-1.5B-Instruct",
+                "hf_id": "Qwen/Qwen2.5-1.5B",
                 "params": "1.5B",
                 "license": "Apache 2.0",
                 "type": "General"
             },
             {
                 "name": "Qwen2.5 3B",
-                "hf_id": "Qwen/Qwen2.5-3B-Instruct",
+                "hf_id": "Qwen/Qwen2.5-3B",
                 "params": "3B",
                 "license": "Apache 2.0",
                 "type": "General"
             },
             {
                 "name": "Qwen2.5 7B",
-                "hf_id": "Qwen/Qwen2.5-7B-Instruct",
+                "hf_id": "Qwen/Qwen2.5-7B",
                 "params": "7B",
                 "license": "Apache 2.0",
                 "type": "General"
             },
             {
-                "name": "Qwen2.5 14B",
-                "hf_id": "Qwen/Qwen2.5-14B-Instruct",
-                "params": "14B",
-                "license": "Apache 2.0",
-                "type": "General"
-            },
-            {
-                "name": "Qwen2.5 32B",
-                "hf_id": "Qwen/Qwen2.5-32B-Instruct",
-                "params": "32B",
-                "license": "Apache 2.0",
-                "type": "General"
-            },
-            {
-                "name": "Qwen2.5 72B",
-                "hf_id": "Qwen/Qwen2.5-72B-Instruct",
-                "params": "72B",
-                "license": "Apache 2.0",
-                "type": "General"
-            },
-            {
                 "name": "Qwen2.5-Coder 7B",
-                "hf_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+                "hf_id": "Qwen/Qwen2.5-Coder-7B",
                 "params": "7B",
                 "license": "Apache 2.0",
                 "type": "Code"
@@ -149,22 +114,15 @@ export const modelGroups = [
         "models": [
             {
                 "name": "Phi-3.5 Mini",
-                "hf_id": "microsoft/Phi-3.5-mini-instruct",
+                "hf_id": "microsoft/Phi-3.5-mini",
                 "params": "3.8B",
                 "license": "MIT",
                 "type": "General"
             },
             {
                 "name": "Phi-3 Small",
-                "hf_id": "microsoft/Phi-3-small-8k-instruct",
+                "hf_id": "microsoft/Phi-3-small-8k",
                 "params": "7B",
-                "license": "MIT",
-                "type": "General"
-            },
-            {
-                "name": "Phi-3 Medium",
-                "hf_id": "microsoft/Phi-3-medium-4k-instruct",
-                "params": "14B",
                 "license": "MIT",
                 "type": "General"
             }
@@ -175,25 +133,71 @@ export const modelGroups = [
         "company_logo": "/logos/mistral-ai.png",
         "models": [
             {
+                "name": "Ministral 3B",
+                "hf_id": "ministral/Ministral-3b",
+                "params": "3B",
+                "license": "Apache 2.0",
+                "type": "General"
+            },
+            {
                 "name": "Mistral 7B v0.3",
-                "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+                "hf_id": "mistralai/Mistral-7B-v0.3",
                 "params": "7B",
                 "license": "Apache 2.0",
                 "type": "General"
+            }
+        ]
+    },
+    {
+        "company_name": "DeepSeek AI",
+        "company_logo": "/logos/deepseek-com.png",
+        "models": [
+            {
+                "name": "DeepSeek Coder 6.7B",
+                "hf_id": "deepseek-ai/deepseek-coder-6.7b",
+                "params": "6.7B",
+                "license": "DeepSeek License",
+                "type": "Code"
             },
             {
-                "name": "Mixtral 8x7B",
-                "hf_id": "mistralai/Mixtral-8x7B-Instruct-v0.1",
-                "params": "46.7B (8x7B MoE)",
-                "license": "Apache 2.0",
+                "name": "DeepSeek LLM 7B",
+                "hf_id": "deepseek-ai/deepseek-llm-7b",
+                "params": "7B",
+                "license": "DeepSeek License",
                 "type": "General"
+            }
+        ]
+    },
+    {
+        "company_name": "Stability AI",
+        "company_logo": "/logos/stability-ai.png",
+        "models": [
+            {
+                "name": "StableLM 2 1.6B",
+                "hf_id": "stabilityai/stablelm-2-1_6b",
+                "params": "1.6B",
+                "license": "Stability AI Community License",
+                "type": "General"
+            }
+        ]
+    },
+    {
+        "company_name": "BigCode",
+        "company_logo": "/logos/bigcode.png",
+        "models": [
+            {
+                "name": "StarCoder2 3B",
+                "hf_id": "bigcode/starcoder2-3b",
+                "params": "3B",
+                "license": "BigCode OpenRAIL-M",
+                "type": "Code"
             },
             {
-                "name": "Mixtral 8x22B",
-                "hf_id": "mistralai/Mixtral-8x22B-Instruct-v0.1",
-                "params": "141B (8x22B MoE)",
-                "license": "Apache 2.0",
-                "type": "General"
+                "name": "StarCoder2 7B",
+                "hf_id": "bigcode/starcoder2-7b",
+                "params": "7B",
+                "license": "BigCode OpenRAIL-M",
+                "type": "Code"
             }
         ]
     }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { interFont } from "../../lib/utils"
+import { useState, useEffect, useCallback } from 'react'
+import { formatDate, interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -15,14 +15,16 @@ import {
     BrainIcon,
     Code2,
     Eye,
-    EyeOff
+    EyeOff,
+    XCircle
 } from 'lucide-react'
 import { useModelStore } from '../../lib/store'
-import { auth } from '../../lib/firebase'
 import { useAuth } from '../../contexts/auth-context'
 import { AuthDialog } from '../auth-dialog'
+import { subscribeToUserJobs, FineTuneJob as FirestoreFineTuneJob } from '../../lib/fine-tune-jobs'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty'
+import { toast } from 'sonner'
 
-// Mock data for fine-tune jobs
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
 
 interface FineTuneJob {
@@ -37,48 +39,152 @@ interface FineTuneJob {
     apiKey?: string
 }
 
-const MOCK_JOBS: FineTuneJob[] = [
-    {
-        id: 'ft-abc123',
-        modelName: 'customer-support-v1',
-        baseModel: 'Llama 3.1 8B',
-        status: 'completed',
-        progress: 100,
-        createdAt: '2025-10-21 10:30 AM',
-        completedAt: '2025-10-21 11:45 AM',
-        modelUrl: 'https://api.modelsmith.ai/v1/models/ft-abc123',
-        apiKey: 'ms_sk_abc123def456ghi789jkl012mno345'
-    },
-    {
-        id: 'ft-def456',
-        modelName: 'code-assistant-v2',
-        baseModel: 'Mistral 7B',
-        status: 'running',
-        progress: 67,
-        createdAt: '2025-10-22 09:15 AM'
-    },
-    {
-        id: 'ft-ghi789',
-        modelName: 'sentiment-analyzer',
-        baseModel: 'Phi-3 Mini',
-        status: 'queued',
-        progress: 0,
-        createdAt: '2025-10-22 10:00 AM'
+// Convert Firestore job to component job format
+function convertFirestoreJob(firestoreJob: FirestoreFineTuneJob): FineTuneJob {
+    return {
+        id: firestoreJob.id,
+        modelName: firestoreJob.config.outputModelName,
+        baseModel: firestoreJob.config.baseModel,
+        status: firestoreJob.status,
+        progress: firestoreJob.progress,
+        createdAt: formatDate(firestoreJob.createdAt),
+        completedAt: firestoreJob.completedAt ? formatDate(firestoreJob.completedAt) : undefined,
+        modelUrl: firestoreJob.modelUrl,
+        apiKey: undefined, // API keys are not stored in Firestore for security
     }
-]
+}
+
+type ModelNameStatus = 'idle' | 'checking' | 'available' | 'unavailable' | 'invalid'
 
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
-    const [jobs] = useState<FineTuneJob[]>(MOCK_JOBS)
+    const [modelNameStatus, setModelNameStatus] = useState<ModelNameStatus>('idle')
+    const [modelNameError, setModelNameError] = useState<string>('')
+    const [jobs, setJobs] = useState<FineTuneJob[]>([])
+    const [loadingJobs, setLoadingJobs] = useState(true)
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
     const [copiedApiKey, setCopiedApiKey] = useState<string | null>(null)
     const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
     const [showCodeExample, setShowCodeExample] = useState<Record<string, boolean>>({})
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
+    const [isStarting, setIsStarting] = useState(false)
     const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
 
     const selectedModelCompany = getSelectedModelCompany()
+
+    const validateModelNameFormat = (name: string): { valid: boolean; error?: string } => {
+        if (!name || name.length === 0) {
+            return { valid: false, error: '' } // Empty is valid for initial state
+        }
+
+        if (name.length > 26) {
+            return { valid: false, error: 'Model name must be 26 characters or less' }
+        }
+
+        // Check if starts or ends with hyphen
+        if (name.startsWith('-') || name.endsWith('-')) {
+            return { valid: false, error: 'Cannot start or end with a hyphen' }
+        }
+
+        // Check for consecutive hyphens
+        if (name.includes('--')) {
+            return { valid: false, error: 'Cannot contain consecutive hyphens' }
+        }
+
+        // Check if lowercase, alphanumeric, and hyphens only
+        const validPattern = /^[a-z0-9-]+$/
+        if (!validPattern.test(name)) {
+            return { valid: false, error: 'Only lowercase letters, numbers, and hyphens allowed' }
+        }
+
+        return { valid: true }
+    }
+
+    const checkModelNameAvailability = useCallback(async (name: string) => {
+        if (!name) {
+            setModelNameStatus('idle')
+            setModelNameError('')
+            return
+        }
+
+        // First validate format
+        const formatValidation = validateModelNameFormat(name)
+        if (!formatValidation.valid) {
+            setModelNameStatus('invalid')
+            setModelNameError(formatValidation.error || '')
+            return
+        }
+
+        // Then check availability with API
+        setModelNameStatus('checking')
+        setModelNameError('')
+
+        try {
+            const token = await user?.getIdToken()
+            const response = await fetch(`/api/check-model-name?name=${encodeURIComponent(name)}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                setModelNameStatus('invalid')
+                setModelNameError(data.error || 'Failed to check availability')
+                return
+            }
+
+            if (data.available) {
+                setModelNameStatus('available')
+                setModelNameError('')
+            } else {
+                setModelNameStatus('unavailable')
+                setModelNameError('This model name is already taken')
+            }
+        } catch (error) {
+            console.error('Error checking model name:', error)
+            setModelNameStatus('invalid')
+            setModelNameError('Failed to check availability')
+        }
+    }, [user])
+
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (modelName) {
+                checkModelNameAvailability(modelName)
+            } else {
+                setModelNameStatus('idle')
+                setModelNameError('')
+            }
+        }, 500) // 500ms debounce
+
+        return () => clearTimeout(timeoutId)
+    }, [modelName, checkModelNameAvailability])
+
+    useEffect(() => {
+        if (!user || user.isAnonymous) {
+            setJobs([])
+            setLoadingJobs(false)
+            return
+        }
+
+        const unsubscribe = subscribeToUserJobs(
+            user.uid,
+            (firestoreJobs) => {
+                const convertedJobs = firestoreJobs.map(convertFirestoreJob)
+                setJobs(convertedJobs)
+                setLoadingJobs(false)
+            },
+            (error) => {
+                console.error('Error loading fine-tune jobs:', error)
+                setLoadingJobs(false)
+            }
+        )
+
+        return () => unsubscribe()
+    }, [user])
 
     const handleCopyUrl = (url: string, jobId: string) => {
         navigator.clipboard.writeText(url)
@@ -115,12 +221,52 @@ function FineTune() {
             return;
         }
 
-        // User is signed in, proceed with starting fine-tuning.
         startFineTune()
     }
 
-    const startFineTune = () => {
+    const startFineTune = async () => {
+        if (!user || !selectedModel) {
+            return;
+        }
 
+        setIsStarting(true);
+
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch('/api/fine-tune/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    modelName,
+                    baseModel: selectedModel.hf_id,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                console.error('Error starting fine-tune:', data.error || data.message);
+                toast.error('Failed to start fine-tune job', {
+                    description: data.error || data.message || 'Please try again later.'
+                });
+                return;
+            }
+
+            setModelName('');
+            toast.success('Fine-tune job started', {
+                description: `Your model "${modelName}" is now queued for training`
+            });
+        } catch (error) {
+            console.error('Error starting fine-tune:', error);
+            toast.error('Failed to start fine-tune job', {
+                description: 'An unexpected error occurred. Please try again.'
+            });
+        } finally {
+            setIsStarting(false);
+        }
     }
 
     const getStatusIcon = (status: JobStatus) => {
@@ -180,14 +326,40 @@ function FineTune() {
                                 {/* Model Name */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">Model Name</label>
-                                    <Input
-                                        placeholder="e.g., customer-support-v1"
-                                        value={modelName}
-                                        onChange={(e) => setModelName(e.target.value)}
-                                        className="bg-blue-50 focus-visible:border-blue-200 border-none"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            placeholder="e.g., customer-support-v1"
+                                            value={modelName}
+                                            onChange={(e) => setModelName(e.target.value.toLowerCase())}
+                                            className={`bg-blue-50 focus-visible:border-blue-200 border-none pr-10 ${modelNameStatus === 'invalid' || modelNameStatus === 'unavailable'
+                                                ? 'border-red-300 focus-visible:border-red-300'
+                                                : modelNameStatus === 'available'
+                                                    ? 'border-green-300 focus-visible:border-green-300'
+                                                    : ''
+                                                }`}
+                                            maxLength={26}
+                                        />
+                                        {/* Status Icon */}
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            {modelNameStatus === 'checking' && (
+                                                <Loader2 className="size-4 text-blue-500 animate-spin" />
+                                            )}
+                                            {modelNameStatus === 'available' && (
+                                                <CheckCircle2 className="size-4 text-green-600" />
+                                            )}
+                                            {(modelNameStatus === 'invalid' || modelNameStatus === 'unavailable') && (
+                                                <XCircle className="size-4 text-red-600" />
+                                            )}
+                                        </div>
+                                    </div>
+                                    {modelNameError && (
+                                        <p className="text-xs text-red-600 flex items-center gap-1">
+                                            <AlertCircle className="size-3" />
+                                            {modelNameError}
+                                        </p>
+                                    )}
                                     <p className="text-xs text-muted-foreground">
-                                        Give your fine-tuned model a unique identifier
+                                        Lowercase letters, numbers, and hyphens only (max 26 characters)
                                     </p>
                                 </div>
 
@@ -197,9 +369,19 @@ function FineTune() {
                                         size="sm"
                                         className='bg-green-500 text-white hover:bg-green-400 border-none'
                                         onClick={handleStartFineTune}
+                                        disabled={modelNameStatus !== 'available' || !modelName || isStarting}
                                     >
-                                        <Play className="size-4" />
-                                        Start Fine-tuning
+                                        {isStarting ? (
+                                            <>
+                                                <Loader2 className="size-4 animate-spin" />
+                                                Starting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Play className="size-4" />
+                                                Start Fine-tuning
+                                            </>
+                                        )}
                                     </Button>
                                 </div>
                             </div>
@@ -436,12 +618,27 @@ print(response.choices[0].message.content)`
                                     </div>
                                 ))}
 
-                                {jobs.length === 0 && (
-                                    <div className="p-12 text-center text-muted-foreground">
-                                        <BrainIcon className="size-12 mx-auto mb-4 opacity-20" />
-                                        <p>No fine-tune jobs yet</p>
-                                        <p className="text-sm">Start your first fine-tune above</p>
+                                {/* Loading state */}
+                                {loadingJobs && (
+                                    <div className="p-12 text-center">
+                                        <Loader2 className="size-12 mx-auto mb-4 animate-spin text-muted-foreground opacity-50" />
+                                        <p className="text-sm text-muted-foreground">Loading your fine-tune jobs...</p>
                                     </div>
+                                )}
+
+                                {/* Empty state */}
+                                {!loadingJobs && jobs.length === 0 && (
+                                    <Empty>
+                                        <EmptyHeader>
+                                            <EmptyMedia variant="icon">
+                                                <BrainIcon />
+                                            </EmptyMedia>
+                                            <EmptyTitle>No fine-tune jobs yet</EmptyTitle>
+                                            <EmptyDescription>
+                                                Start your first fine-tuning job above to create a custom model trained on your data
+                                            </EmptyDescription>
+                                        </EmptyHeader>
+                                    </Empty>
                                 )}
                             </div>
                         </div>

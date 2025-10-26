@@ -1,8 +1,10 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
 let adminApp: App;
 let adminAuth: Auth;
+let adminFirestore: Firestore;
 
 /**
  * Initialize Firebase Admin SDK
@@ -10,9 +12,7 @@ let adminAuth: Auth;
  */
 function initializeFirebaseAdmin() {
     if (getApps().length === 0) {
-        // Check if we're using service account JSON file or individual credentials
         if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-            // Option 1: Using service account JSON string
             const serviceAccount = JSON.parse(
                 process.env.FIREBASE_SERVICE_ACCOUNT_KEY
             );
@@ -20,6 +20,7 @@ function initializeFirebaseAdmin() {
             adminApp = initializeApp({
                 credential: cert(serviceAccount),
                 projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
             });
         } else {
             throw new Error(
@@ -28,12 +29,14 @@ function initializeFirebaseAdmin() {
         }
 
         adminAuth = getAuth(adminApp);
+        adminFirestore = getFirestore(adminApp);
     } else {
         adminApp = getApps()[0];
         adminAuth = getAuth(adminApp);
+        adminFirestore = getFirestore(adminApp);
     }
 
-    return { adminApp, adminAuth };
+    return { adminApp, adminAuth, adminFirestore };
 }
 
 /**
@@ -60,4 +63,17 @@ export function getAdminApp(): App {
     return adminApp;
 }
 
-export { adminApp, adminAuth };
+/**
+ * Get Firebase Admin Firestore instance
+ * Lazy initialization to avoid initializing on client-side
+ */
+export function getAdminFirestore(): Firestore {
+    if (!adminFirestore) {
+        const { adminFirestore: firestore } = initializeFirebaseAdmin();
+        return firestore;
+    }
+    return adminFirestore;
+}
+
+export { adminApp, adminAuth, adminFirestore };
+

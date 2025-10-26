@@ -16,7 +16,6 @@ import { ShimmeringText } from "../ui/shadcn-io/shimmering-text"
 import { interFont } from "../../lib/utils"
 import { BorderBeam } from "../ui/border-beam"
 import { useModelStore } from "../../lib/store/model-store"
-import { getAuthToken } from "../../lib/auth"
 import { useAuth } from "../../contexts/auth-context"
 
 function ChatInput() {
@@ -33,10 +32,15 @@ function ChatInput() {
     const selectedModelCompany = getSelectedModelCompany()
 
     const handleSendMessage = async () => {
-        const token = await getAuthToken();
-        sendMessage({ text: chatInput }, {
+        const token = await user?.getIdToken();
+        sendMessage({
+            text: chatInput,
+        }, {
             headers: {
                 'Authorization': `Bearer ${token}`,
+            },
+            body: {
+                modelId: selectedModel.hf_id,
             }
         });
         setChatInput('');

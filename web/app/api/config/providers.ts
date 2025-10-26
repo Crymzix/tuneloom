@@ -6,8 +6,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
  * Connects to OpenAI-compatible inference service
  */
 export const customProvider = createOpenAICompatible({
-  name: 'modelsmith',
-  baseURL: process.env.OPENAI_COMPATIBLE_BASE_URL || 'http://localhost:8880/v1',
+    name: 'modelsmith',
+    baseURL: process.env.OPENAI_COMPATIBLE_BASE_URL || 'http://localhost:8880/v1',
 });
 
 /**
@@ -19,6 +19,5 @@ export const googleProvider = google;
  * Available model configurations
  */
 export const MODELS = {
-  CUSTOM_GEMMA: 'google/gemma-3-270m',
-  GOOGLE_GEMINI_FLASH: 'gemini-2.5-flash',
+    GOOGLE_GEMINI_FLASH: 'gemini-2.5-flash',
 } as const;
