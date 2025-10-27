@@ -9,6 +9,9 @@ import { JobsClient } from '@google-cloud/run';
 export const customProvider = createOpenAICompatible({
     name: 'modelsmith',
     baseURL: process.env.OPENAI_COMPATIBLE_BASE_URL || 'http://localhost:8880/v1',
+    headers: {
+        'Authorization': `Bearer ${process.env.BASE_MODEL_API_KEY || ''}`,
+    }
 });
 
 /**

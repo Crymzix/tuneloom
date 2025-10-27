@@ -457,7 +457,7 @@ function TrainingDataInput() {
                         </div>
                     </div>
 
-                    <div className="border rounded-lg bg-background shadow-xs overflow-hidden flex flex-col min-h-0 flex-1">
+                    <div className="rounded-lg bg-background shadow-sm overflow-hidden flex flex-col min-h-0 flex-1">
                         <div className="bg-muted/50 border-b flex-shrink-0">
                             <div className="w-full">
                                 <div className="flex">

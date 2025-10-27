@@ -99,6 +99,26 @@ export interface FineTuneJob {
 }
 
 /**
+ * Model API key document
+ * 
+ */
+export interface ModelApiKey {
+    keyId: string;
+    keyHash: string;
+    userId: string;
+    modelId: string;
+    type: 'fine-tuned' | 'base';
+    createdAt: Date;
+    lastUsedAt: Date | null;
+    expiresAt: Date | null;
+    isActive: boolean;
+    metadata?: {
+        jobId?: string;
+        name?: string;
+    };
+}
+
+/**
  * Request body for starting a fine-tune job
  */
 export interface StartFineTuneRequest {

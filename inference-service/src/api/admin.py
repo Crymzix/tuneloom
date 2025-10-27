@@ -1,10 +1,12 @@
 """Admin endpoints for service management."""
 
 import torch
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Dict, Any
 
 from ..config import config
 from ..core.model_manager import ModelManager
+from .middleware.auth import verify_api_key
 
 router = APIRouter()
 
@@ -21,14 +23,32 @@ def create_admin_router(model_manager: ModelManager) -> APIRouter:
     """
 
     @router.post("/admin/unload/{model_id}")
-    async def unload_model(model_id: str):
-        """Manually unload a model."""
+    async def unload_model(
+        model_id: str,
+        auth: Dict[str, Any] = Depends(verify_api_key)
+    ):
+        """
+        Manually unload a model - Requires authentication.
+
+        Note: Only authenticated users can access admin endpoints.
+        In local dev mode with auth disabled, this is accessible without credentials.
+        """
+        # Additional check: You may want to restrict admin endpoints to specific users
+        # For now, any authenticated user can use admin endpoints
         await model_manager.unload_model(model_id)
-        return {"message": f"Model {model_id} unloaded"}
+        return {
+            "message": f"Model {model_id} unloaded",
+            "requestedBy": auth.get("userId")
+        }
 
     @router.get("/admin/stats")
-    async def get_stats():
-        """Get service statistics."""
+    async def get_stats(auth: Dict[str, Any] = Depends(verify_api_key)):
+        """
+        Get service statistics - Requires authentication.
+
+        Note: Only authenticated users can access admin endpoints.
+        In local dev mode with auth disabled, this is accessible without credentials.
+        """
         stats = {
             "loaded_models": model_manager.list_loaded_models(),
             "model_count": len(model_manager.list_loaded_models()),

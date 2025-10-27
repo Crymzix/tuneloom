@@ -38,7 +38,7 @@ export interface FineTuneJob {
     completedAt?: Date;
     failedAt?: Date;
     error?: string;
-    modelUrl?: string;
+    inferenceUrl?: string;
     cloudRunJobName?: string;
 }
 
@@ -72,7 +72,7 @@ function docToJob(doc: any): FineTuneJob {
         completedAt: data.completedAt ? convertTimestamp(data.completedAt) : undefined,
         failedAt: data.failedAt ? convertTimestamp(data.failedAt) : undefined,
         error: data.error,
-        modelUrl: data.modelUrl,
+        inferenceUrl: data.inferenceUrl,
         cloudRunJobName: data.cloudRunJobName,
     };
 }

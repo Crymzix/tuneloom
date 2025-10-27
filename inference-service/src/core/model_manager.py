@@ -89,11 +89,27 @@ class ModelManager:
         # Check if already cached
         if os.path.exists(local_path) and os.path.isdir(local_path):
             logger.info(f"Model {model_id} found in local cache")
+            # Check if merged subdirectory exists in cache
+            merged_path = os.path.join(local_path, "merged")
+            if os.path.exists(merged_path) and os.path.isdir(merged_path):
+                logger.info(f"Using cached merged subdirectory: {merged_path}")
+                return merged_path
             return local_path
 
         logger.info(f"Downloading model {model_id} from GCS...")
         gcs_path = self._get_gcs_model_path(model_id)
-        logger.info(f"Getting model from path {gcs_path} from GCS...")
+
+        # Check if fine-tuned model has a merged subdirectory in GCS
+        gcs_merged_path = f"{gcs_path}/merged"
+        merged_blobs = list(self.bucket.list_blobs(prefix=gcs_merged_path, max_results=1))
+
+        if merged_blobs:
+            logger.info(f"Found merged subdirectory in GCS for {model_id}, using {gcs_merged_path}")
+            gcs_path = gcs_merged_path
+            # Adjust local path to point to merged subdirectory
+            local_path = os.path.join(local_path, "merged")
+        else:
+            logger.info(f"Getting model from path {gcs_path} from GCS...")
 
         try:
             # List all blobs with the model prefix
@@ -342,7 +358,7 @@ class ModelManager:
             logger.info(f"Loading model: {model_id}")
 
             try:
-                # Download from GCS
+                # Download from GCS (will return merged path if it exists)
                 local_path = await self._download_from_gcs(model_id)
 
                 # Load tokenizer

@@ -26,6 +26,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '..
 import { toast } from 'sonner'
 import { Skeleton } from '../ui/skeleton'
 import { Progress } from '../ui/progress'
+import { ScrollArea } from '../ui/scroll-area'
 
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
 
@@ -37,7 +38,7 @@ interface FineTuneJob {
     progress: number
     createdAt: string
     completedAt?: string
-    modelUrl?: string
+    inferenceUrl?: string
     apiKey?: string
 }
 
@@ -51,7 +52,7 @@ function convertFirestoreJob(firestoreJob: FirestoreFineTuneJob): FineTuneJob {
         progress: firestoreJob.progress,
         createdAt: formatDate(firestoreJob.createdAt),
         completedAt: firestoreJob.completedAt ? formatDate(firestoreJob.completedAt) : undefined,
-        modelUrl: firestoreJob.modelUrl,
+        inferenceUrl: firestoreJob.inferenceUrl,
         apiKey: undefined, // API keys are not stored in Firestore for security
     }
 }
@@ -325,7 +326,7 @@ function FineTune() {
                 <div className="w-full max-w-5xl px-6 py-8 z-20">
                     <div className="space-y-8 pr-4">
                         {/* Start New Fine-tune Section */}
-                        <div className="border rounded-lg bg-background shadow-xs p-6">
+                        <div className="rounded-lg bg-background shadow-sm p-6">
                             <div className="flex items-center gap-2 mb-6">
                                 <h3 className="text-lg font-semibold">Fine-tune on</h3>
                                 {
@@ -407,162 +408,163 @@ function FineTune() {
                             </div>
                         </div>
 
-                        <div className="border rounded-lg bg-background shadow-xs overflow-hidden">
-                            <div className="p-6">
+                        <div className="rounded-lg bg-background shadow-sm overflow-hidden">
+                            <div className="p-6 border-b">
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-lg font-semibold">Your Fine-tune Jobs</h3>
                                 </div>
                             </div>
 
                             {/* Jobs List */}
-                            <div className="space-y-0">
-                                {jobs.map((job, index) => (
-                                    <div
-                                        key={job.id}
-                                        className={`p-6 border-t hover:bg-muted/30 transition-colors ${index === jobs.length - 1 ? '' : ''
-                                            }`}
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            {/* Left side - Job info */}
-                                            <div className="flex-1 space-y-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div>
-                                                        <h4 className="font-semibold text-sm">
-                                                            {job.modelName}
-                                                        </h4>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Based on {job.baseModel}
-                                                        </p>
-                                                    </div>
-                                                    <div className='flex items-center gap-2 ml-auto'>
-                                                        {getStatusIcon(job.status)}
-                                                        {getStatusBadge(job.status)}
-                                                    </div>
-                                                </div>
-
-                                                {/* Progress bar for running jobs */}
-                                                {job.status === 'running' && (
-                                                    <div className="space-y-1">
-                                                        <Progress value={job.progress * 100} />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {Math.round(job.progress * 100)}% complete
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {/* Model URL and API Key for completed jobs */}
-                                                {job.status === 'completed' && job.modelUrl && (
-                                                    <div className="space-y-4">
-                                                        {/* API Endpoint */}
-                                                        <div className="space-y-2">
-                                                            <p className="text-xs font-medium text-muted-foreground">
-                                                                API Endpoint
+                            <ScrollArea className="h-[calc(100vh-274px)]">
+                                <div className="space-y-0">
+                                    {jobs.map((job, index) => (
+                                        <div
+                                            key={job.id}
+                                            className={`p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === jobs.length - 1 ? '' : ''
+                                                }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                {/* Left side - Job info */}
+                                                <div className="flex-1 space-y-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div>
+                                                            <h4 className="font-semibold text-sm">
+                                                                {job.modelName}
+                                                            </h4>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Based on {job.baseModel}
                                                             </p>
-                                                            <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
-                                                                <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                    {job.modelUrl}
-                                                                </code>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon-sm"
-                                                                            className="size-7 hover:bg-slate-700"
-                                                                            onClick={() => handleCopyUrl(job.modelUrl!, job.id)}
-                                                                        >
-                                                                            {copiedUrl === job.id ? (
-                                                                                <CheckCircle2 className="size-3 text-green-400" />
-                                                                            ) : (
-                                                                                <Copy className="size-3 text-slate-300" />
-                                                                            )}
-                                                                        </Button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="bottom">
-                                                                        {copiedUrl === job.id ? 'Copied!' : 'Copy URL'}
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </div>
                                                         </div>
+                                                        <div className='flex items-center gap-2 ml-auto'>
+                                                            {getStatusIcon(job.status)}
+                                                            {getStatusBadge(job.status)}
+                                                        </div>
+                                                    </div>
 
-                                                        {/* API Key */}
-                                                        {job.apiKey && (
+                                                    {/* Progress bar for running jobs */}
+                                                    {job.status === 'running' && (
+                                                        <div className="space-y-1">
+                                                            <Progress value={job.progress * 100} />
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {Math.round(job.progress * 100)}% complete
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Model URL and API Key for completed jobs */}
+                                                    {job.status === 'completed' && job.inferenceUrl && (
+                                                        <div className="space-y-4">
+                                                            {/* API Endpoint */}
                                                             <div className="space-y-2">
                                                                 <p className="text-xs font-medium text-muted-foreground">
-                                                                    API Key
+                                                                    API Endpoint
                                                                 </p>
                                                                 <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
                                                                     <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                        {showApiKey[job.id] ? job.apiKey : maskApiKey(job.apiKey)}
+                                                                        {job.inferenceUrl}
                                                                     </code>
-                                                                    <div className="flex gap-1">
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon-sm"
-                                                                                    className="size-7 hover:bg-slate-700"
-                                                                                    onClick={() => toggleApiKeyVisibility(job.id)}
-                                                                                >
-                                                                                    {showApiKey[job.id] ? (
-                                                                                        <EyeOff className="size-3 text-slate-300" />
-                                                                                    ) : (
-                                                                                        <Eye className="size-3 text-slate-300" />
-                                                                                    )}
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent side="bottom">
-                                                                                {showApiKey[job.id] ? 'Hide' : 'Show'} API key
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon-sm"
-                                                                                    className="size-7 hover:bg-slate-700"
-                                                                                    onClick={() => handleCopyApiKey(job.apiKey!, job.id)}
-                                                                                >
-                                                                                    {copiedApiKey === job.id ? (
-                                                                                        <CheckCircle2 className="size-3 text-green-400" />
-                                                                                    ) : (
-                                                                                        <Copy className="size-3 text-slate-300" />
-                                                                                    )}
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent side="bottom">
-                                                                                {copiedApiKey === job.id ? 'Copied!' : 'Copy API key'}
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </div>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon-sm"
+                                                                                className="size-7 hover:bg-slate-700"
+                                                                                onClick={() => handleCopyUrl(job.inferenceUrl!, job.id)}
+                                                                            >
+                                                                                {copiedUrl === job.id ? (
+                                                                                    <CheckCircle2 className="size-3 text-green-400" />
+                                                                                ) : (
+                                                                                    <Copy className="size-3 text-slate-300" />
+                                                                                )}
+                                                                            </Button>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom">
+                                                                            {copiedUrl === job.id ? 'Copied!' : 'Copy URL'}
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
                                                                 </div>
                                                             </div>
-                                                        )}
 
-                                                        {/* Usage Example */}
-                                                        <div className="space-y-2">
-                                                            <div className="flex items-center justify-between">
-                                                                <p className="text-xs font-medium text-muted-foreground">
-                                                                    OpenAI SDK Usage Example
-                                                                </p>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-6 px-2 text-xs"
-                                                                    onClick={() => toggleCodeExample(job.id)}
-                                                                >
-                                                                    <Code2 className="size-3 mr-1" />
-                                                                    {showCodeExample[job.id] ? 'Hide' : 'Show'} Example
-                                                                </Button>
-                                                            </div>
+                                                            {/* API Key */}
+                                                            {job.apiKey && (
+                                                                <div className="space-y-2">
+                                                                    <p className="text-xs font-medium text-muted-foreground">
+                                                                        API Key
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
+                                                                        <code className="text-xs font-mono text-white flex-1 truncate">
+                                                                            {showApiKey[job.id] ? job.apiKey : maskApiKey(job.apiKey)}
+                                                                        </code>
+                                                                        <div className="flex gap-1">
+                                                                            <Tooltip>
+                                                                                <TooltipTrigger asChild>
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon-sm"
+                                                                                        className="size-7 hover:bg-slate-700"
+                                                                                        onClick={() => toggleApiKeyVisibility(job.id)}
+                                                                                    >
+                                                                                        {showApiKey[job.id] ? (
+                                                                                            <EyeOff className="size-3 text-slate-300" />
+                                                                                        ) : (
+                                                                                            <Eye className="size-3 text-slate-300" />
+                                                                                        )}
+                                                                                    </Button>
+                                                                                </TooltipTrigger>
+                                                                                <TooltipContent side="bottom">
+                                                                                    {showApiKey[job.id] ? 'Hide' : 'Show'} API key
+                                                                                </TooltipContent>
+                                                                            </Tooltip>
+                                                                            <Tooltip>
+                                                                                <TooltipTrigger asChild>
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon-sm"
+                                                                                        className="size-7 hover:bg-slate-700"
+                                                                                        onClick={() => handleCopyApiKey(job.apiKey!, job.id)}
+                                                                                    >
+                                                                                        {copiedApiKey === job.id ? (
+                                                                                            <CheckCircle2 className="size-3 text-green-400" />
+                                                                                        ) : (
+                                                                                            <Copy className="size-3 text-slate-300" />
+                                                                                        )}
+                                                                                    </Button>
+                                                                                </TooltipTrigger>
+                                                                                <TooltipContent side="bottom">
+                                                                                    {copiedApiKey === job.id ? 'Copied!' : 'Copy API key'}
+                                                                                </TooltipContent>
+                                                                            </Tooltip>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
 
-                                                            {showCodeExample[job.id] && (
-                                                                <div className="relative">
-                                                                    <pre className="p-4 bg-slate-900 border border-slate-700 rounded-md overflow-x-auto text-xs">
-                                                                        <code className="text-slate-200 font-mono">{`from openai import OpenAI
+                                                            {/* Usage Example */}
+                                                            <div className="space-y-2">
+                                                                <div className="flex items-center justify-between">
+                                                                    <p className="text-xs font-medium text-muted-foreground">
+                                                                        OpenAI SDK Usage Example
+                                                                    </p>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-6 px-2 text-xs"
+                                                                        onClick={() => toggleCodeExample(job.id)}
+                                                                    >
+                                                                        <Code2 className="size-3 mr-1" />
+                                                                        {showCodeExample[job.id] ? 'Hide' : 'Show'} Example
+                                                                    </Button>
+                                                                </div>
+
+                                                                {showCodeExample[job.id] && (
+                                                                    <div className="relative">
+                                                                        <pre className="p-4 bg-slate-900 border border-slate-700 rounded-md overflow-x-auto text-xs">
+                                                                            <code className="text-slate-200 font-mono">{`from openai import OpenAI
 
 # Initialize the client with your fine-tuned model
 client = OpenAI(
-    base_url="${job.modelUrl}",
+    base_url="${job.inferenceUrl}",
     api_key="${job.apiKey ? maskApiKey(job.apiKey) : 'your-api-key'}"
 )
 
@@ -575,19 +577,19 @@ response = client.chat.completions.create(
 )
 
 print(response.choices[0].message.content)`}</code>
-                                                                    </pre>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon-sm"
-                                                                                className="absolute top-2 right-2 size-7 hover:bg-slate-700"
-                                                                                onClick={() => {
-                                                                                    const code = `from openai import OpenAI
+                                                                        </pre>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon-sm"
+                                                                                    className="absolute top-2 right-2 size-7 hover:bg-slate-700"
+                                                                                    onClick={() => {
+                                                                                        const code = `from openai import OpenAI
 
 # Initialize the client with your fine-tuned model
 client = OpenAI(
-    base_url="${job.modelUrl}",
+    base_url="${job.inferenceUrl}",
     api_key="${job.apiKey || 'your-api-key'}"
 )
 
@@ -600,80 +602,81 @@ response = client.chat.completions.create(
 )
 
 print(response.choices[0].message.content)`
-                                                                                    navigator.clipboard.writeText(code)
-                                                                                }}
-                                                                            >
-                                                                                <Copy className="size-3 text-slate-300" />
-                                                                            </Button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="bottom">
-                                                                            Copy code
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </div>
-                                                            )}
+                                                                                        navigator.clipboard.writeText(code)
+                                                                                    }}
+                                                                                >
+                                                                                    <Copy className="size-3 text-slate-300" />
+                                                                                </Button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent side="bottom">
+                                                                                Copy code
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <p className="text-xs text-muted-foreground">
+                                                                This model is compatible with any OpenAI SDK. Keep your API key secure.
+                                                            </p>
                                                         </div>
-
-                                                        <p className="text-xs text-muted-foreground">
-                                                            This model is compatible with any OpenAI SDK. Keep your API key secure.
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {/* Timestamps */}
-                                                <div className="flex gap-4 text-xs text-muted-foreground">
-                                                    <span>Started: {job.createdAt}</span>
-                                                    {job.completedAt && (
-                                                        <span>Completed: {job.completedAt}</span>
                                                     )}
+
+                                                    {/* Timestamps */}
+                                                    <div className="flex gap-4 text-xs text-muted-foreground">
+                                                        <span>Started: {job.createdAt}</span>
+                                                        {job.completedAt && (
+                                                            <span>Completed: {job.completedAt}</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
 
-                                {/* Loading state */}
-                                {loadingJobs && (
-                                    <>
-                                        {[1, 2, 3].map((i) => (
-                                            <div key={i} className="p-6 border-t">
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1 space-y-3">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="space-y-2">
-                                                                <Skeleton className="h-4 w-32" />
-                                                                <Skeleton className="h-3 w-48" />
+                                    {/* Loading state */}
+                                    {loadingJobs && (
+                                        <>
+                                            {[1, 2, 3].map((i) => (
+                                                <div key={i} className="p-6 border-t">
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="flex-1 space-y-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="space-y-2">
+                                                                    <Skeleton className="h-4 w-32" />
+                                                                    <Skeleton className="h-3 w-48" />
+                                                                </div>
+                                                                <div className="flex items-center gap-2 ml-auto">
+                                                                    <Skeleton className="h-4 w-4 rounded-full" />
+                                                                    <Skeleton className="h-6 w-20 rounded-md" />
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2 ml-auto">
-                                                                <Skeleton className="h-4 w-4 rounded-full" />
-                                                                <Skeleton className="h-6 w-20 rounded-md" />
+                                                            <div className="flex gap-4">
+                                                                <Skeleton className="h-3 w-40" />
                                                             </div>
-                                                        </div>
-                                                        <div className="flex gap-4">
-                                                            <Skeleton className="h-3 w-40" />
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
+                                            ))}
+                                        </>
+                                    )}
 
-                                {/* Empty state */}
-                                {!loadingJobs && jobs.length === 0 && (
-                                    <Empty>
-                                        <EmptyHeader>
-                                            <EmptyMedia variant="icon">
-                                                <BrainIcon />
-                                            </EmptyMedia>
-                                            <EmptyTitle>No fine-tune jobs yet</EmptyTitle>
-                                            <EmptyDescription>
-                                                Start your first fine-tuning job above to create a custom model trained on your data
-                                            </EmptyDescription>
-                                        </EmptyHeader>
-                                    </Empty>
-                                )}
-                            </div>
+                                    {/* Empty state */}
+                                    {!loadingJobs && jobs.length === 0 && (
+                                        <Empty>
+                                            <EmptyHeader>
+                                                <EmptyMedia variant="icon">
+                                                    <BrainIcon />
+                                                </EmptyMedia>
+                                                <EmptyTitle>No fine-tune jobs yet</EmptyTitle>
+                                                <EmptyDescription>
+                                                    Start your first fine-tuning job above to create a custom model trained on your data
+                                                </EmptyDescription>
+                                            </EmptyHeader>
+                                        </Empty>
+                                    )}
+                                </div>
+                            </ScrollArea>
                         </div>
                     </div>
                 </div>

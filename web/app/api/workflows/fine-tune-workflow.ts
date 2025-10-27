@@ -1,7 +1,8 @@
 import { FatalError } from "workflow";
 import { getAdminFirestore } from "../../../lib/firebase-admin";
 import { getJobsClient } from "../config/providers";
-import { FineTuneJob, FineTuneJobConfig } from "../types";
+import { FineTuneJob, FineTuneJobConfig, ModelApiKey } from "../types";
+import crypto from 'crypto'
 
 /**
  * Parameters for queuing a fine-tune job
@@ -25,6 +26,13 @@ export async function queueFineTuneJob(jobId: string) {
         });
 
         await updateJobWithCloudRunName(jobId, cloudRunJobName);
+
+        // Create API
+        await generateApiKeyForModel(
+            jobId,
+            jobData.config.outputModelName,
+            jobData.userId
+        );
 
         console.log(`Fine-tune job ${jobId} queued successfully: ${cloudRunJobName}`);
     } catch (error) {
@@ -128,6 +136,37 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
         }
 
         // Other errors may be transient, allow retries
-        throw new Error(`Failed to create Cloud Run Job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new FatalError(`Failed to create Cloud Run Job: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+}
+
+async function generateApiKeyForModel(jobId: string, modelName: string, userId: string) {
+    "use step";
+    const firestore = getAdminFirestore();
+
+    const keySecret = `sk_${crypto.randomBytes(32).toString('base64url')}`;
+    const keyId = `ak_${crypto.randomBytes(16).toString('base64url')}`;
+    const keyHash = crypto.createHash('sha256').update(keySecret).digest('hex');
+
+    await firestore
+        .collection('api-keys')
+        .doc(keyId)
+        .set({
+            keyHash,
+            userId,
+            modelId: modelName,
+            createdAt: new Date(),
+            lastUsedAt: null,
+            expiresAt: null,
+            isActive: true,
+            type: 'fine-tuned',
+        } as ModelApiKey)
+
+    await firestore.collection('fine-tune-jobs').doc(jobId).update({
+        apiKey: keyId,
+        apiKeySecret: keySecret,
+        inferenceUrl: `${process.env.OPENAI_COMPATIBLE_BASE_URL}/${modelName}`
+    });
+
+    return { keyId, keySecret }
 }

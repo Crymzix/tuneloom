@@ -34,6 +34,10 @@ class Config:
     # Local development mode flag
     IS_LOCAL = os.getenv("LOCAL_DEV", "false").lower() == "true"
 
+    # Authentication Configuration
+    REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "true").lower() == "true"
+    BASE_MODEL_API_KEY = os.getenv("BASE_MODEL_API_KEY", None)  # Static key for base models
+
     # GPU/Device Configuration
     # Detect Apple Silicon MPS support for local testing
     if torch.backends.mps.is_available() and torch.backends.mps.is_built():
@@ -57,7 +61,7 @@ class Config:
     def get_max_cached_models() -> int:
         """Get max cached models based on environment."""
         if Config.IS_LOCAL:
-            return 1  # Only keep 1 model in memory locally
+            return 2  # Only keep 2 model in memory locally
         return Config.MAX_CACHED_MODELS
 
 

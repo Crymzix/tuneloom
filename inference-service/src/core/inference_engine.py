@@ -285,13 +285,14 @@ class InferenceEngine:
         thread.join()
 
     async def generate(
-        self, request: ChatCompletionRequest
+        self, request: ChatCompletionRequest, auth_context: dict = None
     ) -> Union[ChatCompletionResponse, StreamingResponse]:
         """
         Generate chat completion.
 
         Args:
             request: Chat completion request
+            auth_context: Optional authentication context with user/key info
 
         Returns:
             ChatCompletionResponse or StreamingResponse
@@ -301,6 +302,13 @@ class InferenceEngine:
         """
         async with self.semaphore:
             try:
+                # Log authenticated request
+                if auth_context and auth_context.get("authenticated"):
+                    logger.info(
+                        f"Authenticated generation request: model={request.model}, "
+                        f"userId={auth_context.get('userId')}, keyId={auth_context.get('keyId')}"
+                    )
+
                 # Load model
                 model_data = await self.model_manager.load_model(request.model)
                 model = model_data["model"]
@@ -432,13 +440,14 @@ class InferenceEngine:
         thread.join()
 
     async def complete(
-        self, request: CompletionRequest
+        self, request: CompletionRequest, auth_context: dict = None
     ) -> Union[CompletionResponse, StreamingResponse]:
         """
         Generate text completion (OpenAI /v1/completions compatible).
 
         Args:
             request: Completion request
+            auth_context: Optional authentication context with user/key info
 
         Returns:
             CompletionResponse or StreamingResponse
@@ -448,6 +457,13 @@ class InferenceEngine:
         """
         async with self.semaphore:
             try:
+                # Log authenticated request
+                if auth_context and auth_context.get("authenticated"):
+                    logger.info(
+                        f"Authenticated completion request: model={request.model}, "
+                        f"userId={auth_context.get('userId')}, keyId={auth_context.get('keyId')}"
+                    )
+
                 # Load model
                 model_data = await self.model_manager.load_model(request.model)
                 model = model_data["model"]
