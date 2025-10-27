@@ -165,8 +165,10 @@ class ModelManager:
             tokenizer.pad_token = tokenizer.eos_token
             logger.info(f"Set pad_token to eos_token for {model_id}")
 
-        # Set default chat template if none exists
-        if not hasattr(tokenizer, "chat_template") or tokenizer.chat_template is None:
+        # Check if model has native chat template
+        has_chat_template = hasattr(tokenizer, "chat_template") and tokenizer.chat_template is not None
+
+        if not has_chat_template:
             # Use a simple but effective default chat template with proper stop tokens
             tokenizer.chat_template = (
                 "{% for message in messages %}"
@@ -179,11 +181,82 @@ class ModelManager:
             )
             logger.info(f"Set default chat template for {model_id}")
 
-            # Set stop tokens to prevent multi-turn hallucination
-            if not hasattr(tokenizer, "stop_tokens") or tokenizer.stop_tokens is None:
-                # Common stop patterns that indicate the start of a new turn
-                tokenizer.stop_tokens = ["User:", "\\nUser:", "\\n\\nUser:"]
-                logger.info(f"Set stop tokens for {model_id}: {tokenizer.stop_tokens}")
+        # Always set stop tokens to prevent multi-turn hallucination
+        # This is critical even for models with native chat templates
+        if not hasattr(tokenizer, "stop_tokens") or tokenizer.stop_tokens is None:
+            # Detect model-specific stop tokens based on chat template or model name
+            stop_tokens = self._get_stop_tokens_for_model(tokenizer, model_id)
+
+            # Validate that stop tokens are in the tokenizer's vocabulary
+            validated_stop_tokens = []
+            for stop_token in stop_tokens:
+                # Try to encode the stop token
+                encoded = tokenizer.encode(stop_token, add_special_tokens=False)
+                if encoded:
+                    validated_stop_tokens.append(stop_token)
+                    logger.debug(f"Stop token '{stop_token}' encoded as {encoded}")
+                else:
+                    logger.warning(f"Stop token '{stop_token}' not in vocabulary, skipping")
+
+            # If no valid stop tokens, use a safer default
+            if not validated_stop_tokens:
+                logger.warning(f"No valid stop tokens found for {model_id}, using fallback")
+                validated_stop_tokens = ["\n\n", "\n"]
+
+            tokenizer.stop_tokens = validated_stop_tokens
+            logger.info(f"Set stop tokens for {model_id}: {tokenizer.stop_tokens}")
+
+    def _get_stop_tokens_for_model(self, tokenizer, model_id: str) -> list:
+        """
+        Determine appropriate stop tokens based on model type and chat template.
+
+        Args:
+            tokenizer: Tokenizer with chat template
+            model_id: Model identifier
+
+        Returns:
+            List of stop token strings
+        """
+        # First, check if tokenizer has additional_special_tokens that might include stop tokens
+        stop_tokens = []
+        if hasattr(tokenizer, "additional_special_tokens"):
+            # Look for common stop token patterns in special tokens
+            for token in tokenizer.additional_special_tokens:
+                if "im_end" in token or "end_of_turn" in token or token == "</s>":
+                    stop_tokens.append(token)
+
+        # If we found special tokens, use them
+        if stop_tokens:
+            logger.info(f"Found stop tokens in special tokens for {model_id}: {stop_tokens}")
+            return stop_tokens
+
+        # Check if model has a chat template we can analyze
+        if hasattr(tokenizer, "chat_template") and tokenizer.chat_template:
+            chat_template = tokenizer.chat_template
+
+            # Qwen models use ChatML format with <|im_start|> and <|im_end|> markers
+            # The model generates: <|im_start|>assistant\nResponse<|im_end|>
+            # So we need to stop when we see <|im_end|> (marks end of assistant turn)
+            if "im_start" in chat_template or "qwen" in model_id.lower():
+                return ["<|im_end|>"]
+
+            # Gemma and similar models often use specific role markers
+            if "gemma" in model_id.lower():
+                # Gemma uses turn-based markers
+                return ["<start_of_turn>", "<end_of_turn>"]
+
+            # Llama-style chat templates
+            if "[INST]" in chat_template or "llama" in model_id.lower():
+                return ["[/INST]"]
+
+            # Check for common user/assistant markers in template
+            if "user" in chat_template.lower() and "assistant" in chat_template.lower():
+                if "<|user|>" in chat_template or "<|assistant|>" in chat_template:
+                    return ["<|user|>", "<|assistant|>"]
+
+        # Generic fallback stop tokens that work for most chat formats
+        # Include variations to catch the start of a new turn
+        return ["User:", "\nUser:", "\n\nUser:", "user:", "\nuser:"]
 
     def _load_model_to_device(self, local_path: str) -> torch.nn.Module:
         """

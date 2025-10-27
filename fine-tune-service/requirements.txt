@@ -11,6 +11,9 @@ datasets>=2.14.0
 # GCS integration
 google-cloud-storage>=2.14.0
 
+# Firebase integration
+firebase-admin>=6.0.0
+
 # Training utilities
 trl>=0.7.0  # Supervised Fine-Tuning trainer
 sentencepiece>=0.1.99

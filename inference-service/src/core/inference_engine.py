@@ -153,10 +153,11 @@ class InferenceEngine:
         # Add sampling safety parameters
         if gen_kwargs["do_sample"]:
             gen_kwargs["top_k"] = 40
-            gen_kwargs["repetition_penalty"] = 1.1
+            gen_kwargs["repetition_penalty"] = 1.15  # Increased to prevent loops
         else:
-            # For greedy decoding, force do_sample=False
+            # For greedy decoding, force do_sample=False and add repetition penalty
             gen_kwargs["do_sample"] = False
+            gen_kwargs["repetition_penalty"] = 1.1  # Prevent loops even in greedy mode
             gen_kwargs.pop("temperature", None)
             gen_kwargs.pop("top_p", None)
 

@@ -1,5 +1,6 @@
 import { google } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { JobsClient } from '@google-cloud/run';
 
 /**
  * Custom provider configuration for ModelSmith
@@ -21,3 +22,27 @@ export const googleProvider = google;
 export const MODELS = {
     GOOGLE_GEMINI_FLASH: 'gemini-2.5-flash',
 } as const;
+
+
+let jobsClient: JobsClient | null = null;
+
+/**
+ * Get or create the JobsClient instance
+ * Uses FIREBASE_SERVICE_ACCOUNT_KEY environment variable for authentication
+ */
+export function getJobsClient(): JobsClient {
+    if (!jobsClient) {
+        // Get service account credentials from environment variable
+        const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+        if (!serviceAccountKey) {
+            throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set');
+        }
+
+        const credentials = JSON.parse(serviceAccountKey);
+        jobsClient = new JobsClient({
+            credentials,
+            projectId: credentials.project_id,
+        });
+    }
+    return jobsClient;
+}

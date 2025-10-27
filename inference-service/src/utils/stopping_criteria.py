@@ -42,4 +42,17 @@ class StopOnTokens(StoppingCriteria):
                 if generated_ids[-stop_len:].tolist() == stop_ids:
                     return True
 
+                # Also check if the stop sequence appears anywhere in the generated tokens
+                # This catches cases where the model generates tokens after the stop sequence
+                if stop_len == 1:
+                    # For single-token stops, check if it appears anywhere
+                    if stop_ids[0] in generated_ids.tolist():
+                        return True
+                else:
+                    # For multi-token sequences, use sliding window
+                    generated_list = generated_ids.tolist()
+                    for i in range(len(generated_list) - stop_len + 1):
+                        if generated_list[i:i + stop_len] == stop_ids:
+                            return True
+
         return False

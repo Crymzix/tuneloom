@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { formatDate, interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -24,6 +24,8 @@ import { AuthDialog } from '../auth-dialog'
 import { subscribeToUserJobs, FineTuneJob as FirestoreFineTuneJob } from '../../lib/fine-tune-jobs'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty'
 import { toast } from 'sonner'
+import { Skeleton } from '../ui/skeleton'
+import { Progress } from '../ui/progress'
 
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
 
@@ -73,6 +75,14 @@ function FineTune() {
 
     const selectedModelCompany = getSelectedModelCompany()
 
+    const hasQueuedJobs = useMemo(() => {
+        return jobs.some(job => job.status === 'queued')
+    }, [jobs]);
+
+    const hasRunningJobs = useMemo(() => {
+        return jobs.some(job => job.status === 'running')
+    }, [jobs]);
+
     const validateModelNameFormat = (name: string): { valid: boolean; error?: string } => {
         if (!name || name.length === 0) {
             return { valid: false, error: '' } // Empty is valid for initial state
@@ -108,7 +118,6 @@ function FineTune() {
             return
         }
 
-        // First validate format
         const formatValidation = validateModelNameFormat(name)
         if (!formatValidation.valid) {
             setModelNameStatus('invalid')
@@ -116,7 +125,6 @@ function FineTune() {
             return
         }
 
-        // Then check availability with API
         setModelNameStatus('checking')
         setModelNameError('')
 
@@ -186,6 +194,11 @@ function FineTune() {
         return () => unsubscribe()
     }, [user])
 
+    useEffect(() => {
+        const hasActiveJob = jobs.some(job => job.status === 'queued' || job.status === 'running');
+        setIsStarting(hasActiveJob);
+    }, [jobs]);
+
     const handleCopyUrl = (url: string, jobId: string) => {
         navigator.clipboard.writeText(url)
         setCopiedUrl(jobId)
@@ -214,7 +227,6 @@ function FineTune() {
     }
 
     const handleStartFineTune = () => {
-        // Check if user is signed in.
         if (user?.isAnonymous) {
             // Prompt user to sign up or sign in before starting fine-tuning.
             setIsAuthDialogOpen(true)
@@ -252,6 +264,8 @@ function FineTune() {
                 toast.error('Failed to start fine-tune job', {
                     description: data.error || data.message || 'Please try again later.'
                 });
+                // Reset isStarting on error since no job was created
+                setIsStarting(false);
                 return;
             }
 
@@ -259,12 +273,14 @@ function FineTune() {
             toast.success('Fine-tune job started', {
                 description: `Your model "${modelName}" is now queued for training`
             });
+            // Note: isStarting will remain true and be managed by the useEffect
+            // that monitors job statuses (queued/running jobs keep it true)
         } catch (error) {
             console.error('Error starting fine-tune:', error);
             toast.error('Failed to start fine-tune job', {
                 description: 'An unexpected error occurred. Please try again.'
             });
-        } finally {
+            // Reset isStarting on error since no job was created
             setIsStarting(false);
         }
     }
@@ -331,7 +347,7 @@ function FineTune() {
                                             placeholder="e.g., customer-support-v1"
                                             value={modelName}
                                             onChange={(e) => setModelName(e.target.value.toLowerCase())}
-                                            className={`bg-blue-50 focus-visible:border-blue-200 border-none pr-10 ${modelNameStatus === 'invalid' || modelNameStatus === 'unavailable'
+                                            className={`shadow-none bg-blue-50 focus-visible:border-blue-200 border-none pr-10 ${modelNameStatus === 'invalid' || modelNameStatus === 'unavailable'
                                                 ? 'border-red-300 focus-visible:border-red-300'
                                                 : modelNameStatus === 'available'
                                                     ? 'border-green-300 focus-visible:border-green-300'
@@ -374,7 +390,11 @@ function FineTune() {
                                         {isStarting ? (
                                             <>
                                                 <Loader2 className="size-4 animate-spin" />
-                                                Starting...
+                                                {
+                                                    hasRunningJobs ? 'Fine-tune in progress...' : (
+                                                        hasQueuedJobs ? 'Job queued...' : 'Starting...'
+                                                    )
+                                                }
                                             </>
                                         ) : (
                                             <>
@@ -387,7 +407,6 @@ function FineTune() {
                             </div>
                         </div>
 
-                        {/* Fine-tune Jobs Section */}
                         <div className="border rounded-lg bg-background shadow-xs overflow-hidden">
                             <div className="p-6">
                                 <div className="flex items-center gap-2">
@@ -424,14 +443,9 @@ function FineTune() {
                                                 {/* Progress bar for running jobs */}
                                                 {job.status === 'running' && (
                                                     <div className="space-y-1">
-                                                        <div className="w-full bg-gray-200 rounded-full h-2">
-                                                            <div
-                                                                className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-                                                                style={{ width: `${job.progress}%` }}
-                                                            />
-                                                        </div>
+                                                        <Progress value={job.progress * 100} />
                                                         <p className="text-xs text-muted-foreground">
-                                                            {job.progress}% complete
+                                                            {Math.round(job.progress * 100)}% complete
                                                         </p>
                                                     </div>
                                                 )}
@@ -620,10 +634,29 @@ print(response.choices[0].message.content)`
 
                                 {/* Loading state */}
                                 {loadingJobs && (
-                                    <div className="p-12 text-center">
-                                        <Loader2 className="size-12 mx-auto mb-4 animate-spin text-muted-foreground opacity-50" />
-                                        <p className="text-sm text-muted-foreground">Loading your fine-tune jobs...</p>
-                                    </div>
+                                    <>
+                                        {[1, 2, 3].map((i) => (
+                                            <div key={i} className="p-6 border-t">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1 space-y-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="space-y-2">
+                                                                <Skeleton className="h-4 w-32" />
+                                                                <Skeleton className="h-3 w-48" />
+                                                            </div>
+                                                            <div className="flex items-center gap-2 ml-auto">
+                                                                <Skeleton className="h-4 w-4 rounded-full" />
+                                                                <Skeleton className="h-6 w-20 rounded-md" />
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-4">
+                                                            <Skeleton className="h-3 w-40" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
                                 )}
 
                                 {/* Empty state */}

@@ -7,8 +7,9 @@ import {
     FineTuneJob,
     FineTuneJobConfig
 } from '../types';
-import { executeCloudRunJob } from '../services/cloud-run-jobs';
 import { getStorage } from 'firebase-admin/storage';
+import { start } from 'workflow/api';
+import { queueFineTuneJob } from '../workflows/fine-tune-workflow';
 
 /**
  * Fine-tune Controller
@@ -20,7 +21,8 @@ export class FineTuneController {
      * Start a new fine-tune job
      * POST /api/fine-tune/start
      *
-     * Ensures only one running job per user using Firestore transaction
+     * Ensures only one running job per user using Firestore transaction.
+     * The job is queued asynchronously in the background, allowing the API to return immediately.
      */
     static async startFineTune(c: AuthContext): Promise<Response> {
         const user = c.get('user');
@@ -70,7 +72,7 @@ export class FineTuneController {
                 const now = new Date();
 
                 const bucket = getStorage().bucket();
-                const trainingDataPath = `training-data/${user.uid}/${body.modelName}`;
+                const trainingDataPath = `training-data/${user.uid}/${body.baseModel.replace('/', '-')}`;
                 const jobConfig: FineTuneJobConfig = {
                     baseModel: body.baseModel,
                     outputModelName: body.modelName,
@@ -95,12 +97,12 @@ export class FineTuneController {
                 };
             });
 
-            await FineTuneController.queueFineTuneJob(result.jobId, body)
+            await start(queueFineTuneJob, [result.jobId]);
 
             const response: StartFineTuneResponse = {
                 jobId: result.jobId,
                 status: result.status,
-                message: 'Fine-tune job created successfully. Job will be queued for processing.',
+                message: 'Fine-tune job created successfully. Job is being queued for processing.',
             };
 
             return c.json(response, 201);
@@ -113,52 +115,6 @@ export class FineTuneController {
             throw new ApiError(
                 500,
                 'Failed to create fine-tune job',
-                'Internal Server Error'
-            );
-        }
-    }
-
-    static async queueFineTuneJob(jobId: string, body: StartFineTuneRequest) {
-        const firestore = getAdminFirestore();
-        try {
-            const jobDoc = await firestore.collection('fine-tune-jobs').doc(jobId).get();
-
-            if (!jobDoc.exists) {
-                throw new ApiError(404, 'Job not found', 'Not Found');
-            }
-
-            const jobData = jobDoc.data() as Omit<FineTuneJob, 'id'>;
-
-            // Queue the job in Cloud Run
-            const cloudRunJobName = await executeCloudRunJob({
-                jobId,
-                userId: jobData.userId,
-                config: jobData.config,
-            });
-
-            await firestore.collection('fine-tune-jobs').doc(jobId).update({
-                cloudRunJobName,
-                updatedAt: new Date(),
-            });
-
-            console.log(`Fine-tune job ${jobId} queued successfully: ${cloudRunJobName}`);
-        } catch (error) {
-            // Update job status to failed
-            try {
-                await firestore.collection('fine-tune-jobs').doc(jobId).update({
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Failed to queue job',
-                    failedAt: new Date(),
-                    updatedAt: new Date(),
-                });
-            } catch (updateError) {
-                console.error('Failed to update job status:', updateError);
-            }
-
-            console.error('Error queuing fine-tune job:', error);
-            throw new ApiError(
-                500,
-                'Failed to queue fine-tune job',
                 'Internal Server Error'
             );
         }

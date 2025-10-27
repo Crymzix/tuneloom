@@ -15,19 +15,13 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    TrainingArguments,
-    Trainer,
-    DataCollatorForLanguageModeling,
 )
-from peft import (
-    LoraConfig,
-    get_peft_model,
-    prepare_model_for_kbit_training,
-    PeftModel,
-)
+from peft import LoraConfig
+from trl import SFTConfig, SFTTrainer
 from datasets import load_dataset, Dataset
 from google.cloud import storage
-import wandb
+import firebase_admin
+from firebase_admin import firestore
 
 # Configure logging
 logging.basicConfig(
@@ -38,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class FineTuneJob:
-    """Fine-tuning job for Gemma models with GCS integration"""
+    """Fine-tuning job for models with GCS integration"""
 
     def __init__(
         self,
@@ -46,6 +40,7 @@ class FineTuneJob:
         output_model_name: str,
         training_data_path: str,
         gcs_bucket: str,
+        job_id: Optional[str] = None,
         gcs_base_model_path: Optional[str] = None,
         gcs_output_path: Optional[str] = None,
         local_cache_dir: str = "/tmp/finetune",
@@ -54,20 +49,17 @@ class FineTuneJob:
         lora_r: int = 16,
         lora_alpha: int = 32,
         lora_dropout: float = 0.05,
-        learning_rate: float = 2e-4,
+        learning_rate: float = 5e-5,
         num_train_epochs: int = 3,
         per_device_train_batch_size: int = 4,
         gradient_accumulation_steps: int = 4,
-        max_seq_length: int = 512,
+        max_seq_length: int = 256,
         warmup_steps: int = 100,
         logging_steps: int = 10,
         save_steps: int = 100,
         eval_steps: int = 100,
         fp16: bool = False,
         bf16: bool = True,
-        use_wandb: bool = False,
-        wandb_project: Optional[str] = None,
-        wandb_run_name: Optional[str] = None,
     ):
         """
         Initialize fine-tuning job
@@ -79,6 +71,7 @@ class FineTuneJob:
             output_model_name: Name for the fine-tuned model
             training_data_path: GCS path to training data (jsonl format)
             gcs_bucket: GCS bucket name
+            job_id: Optional job ID for tracking status in Firestore
             gcs_base_model_path: Optional explicit GCS path to base model (overrides auto-detection)
             gcs_output_path: GCS path prefix for output (default: models/{output_model_name})
             local_cache_dir: Local directory for caching models and data
@@ -98,14 +91,12 @@ class FineTuneJob:
             eval_steps: Evaluate every N steps
             fp16: Use FP16 mixed precision
             bf16: Use BF16 mixed precision
-            use_wandb: Enable Weights & Biases logging
-            wandb_project: W&B project name
-            wandb_run_name: W&B run name
         """
         self.base_model = base_model
         self.output_model_name = output_model_name
         self.training_data_path = training_data_path
         self.gcs_bucket = gcs_bucket
+        self.job_id = job_id
         self.gcs_base_model_path = gcs_base_model_path
         self.gcs_output_path = gcs_output_path or f"models/{output_model_name}"
 
@@ -141,21 +132,56 @@ class FineTuneJob:
         self.fp16 = fp16
         self.bf16 = bf16
 
-        # W&B config
-        self.use_wandb = use_wandb
-        self.wandb_project = wandb_project
-        self.wandb_run_name = wandb_run_name
-
         # Initialize GCS client
         self.gcs_client = storage.Client()
         self.bucket = self.gcs_client.bucket(self.gcs_bucket)
 
+        # Initialize Firebase Admin SDK
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        self.firestore_db = firestore.client()
+
         logger.info(f"Initialized FineTuneJob for {output_model_name}")
+        if self.job_id:
+            logger.info(f"Job ID: {job_id}")
         logger.info(f"Base model: {base_model}")
         logger.info(f"Training data: gs://{gcs_bucket}/{training_data_path}")
         logger.info(f"Output path: gs://{gcs_bucket}/{self.gcs_output_path}")
         logger.info(f"Quantization: {'4-bit' if use_4bit else '8-bit' if use_8bit else 'None'}")
         logger.info(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+
+    def update_job_status(
+        self,
+        status: str,
+        message: Optional[str] = None,
+        progress: Optional[float] = None,
+        error: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Update job status in Firestore"""
+        if not self.job_id:
+            return
+
+        try:
+            job_ref = self.firestore_db.collection('fine-tune-jobs').document(self.job_id)
+            update_data = {
+                'status': status,
+                'updated_at': firestore.SERVER_TIMESTAMP,
+            }
+
+            if message:
+                update_data['message'] = message
+            if progress is not None:
+                update_data['progress'] = progress
+            if error:
+                update_data['error'] = error
+            if metadata:
+                update_data['metadata'] = metadata
+
+            job_ref.update(update_data)
+            logger.info(f"Updated job status: {status}" + (f" - {message}" if message else ""))
+        except Exception as e:
+            logger.warning(f"Failed to update job status in Firestore: {e}")
 
     def download_from_gcs(self, gcs_path: str, local_path: Path) -> Path:
         """Download files from GCS to local directory"""
@@ -249,7 +275,11 @@ class FineTuneJob:
         # Set pad token if not present
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
             logger.info("Set pad_token to eos_token")
+
+        # Set padding side for causal LM (pad on the right)
+        tokenizer.padding_side = "right"
 
         # Configure quantization
         quantization_config = None
@@ -258,8 +288,7 @@ class FineTuneJob:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16 if self.bf16 else torch.float16,
-                bnb_4bit_use_double_quant=True,  # Nested quantization for more memory savings
+                bnb_4bit_compute_dtype=torch.bfloat16,
             )
         elif self.use_8bit:
             logger.info("Using 8-bit quantization")
@@ -274,59 +303,36 @@ class FineTuneJob:
             quantization_config=quantization_config,
             device_map="auto",
             trust_remote_code=True,
-            torch_dtype=torch.bfloat16 if self.bf16 else torch.float16,
-            use_cache=False,  # Disable cache for training
+            attn_implementation='eager',
         )
 
-        # Prepare model for k-bit training if using quantization
-        if self.use_4bit or self.use_8bit:
-            logger.info("Preparing model for k-bit training...")
-            model = prepare_model_for_kbit_training(model)
+        # Set pad_token_id on model config
+        model.config.pad_token_id = tokenizer.pad_token_id
 
         logger.info("Base model loaded successfully")
         return model, tokenizer
 
-    def setup_lora(self, model: AutoModelForCausalLM) -> PeftModel:
-        """Setup LoRA configuration and wrap model"""
-        logger.info("Setting up LoRA...")
+    def setup_lora(self) -> LoraConfig:
+        """Setup LoRA configuration"""
+        logger.info("Setting up LoRA configuration...")
 
-        # LoRA config optimized for Gemma
+        # LoRA config
         lora_config = LoraConfig(
             r=self.lora_r,
             lora_alpha=self.lora_alpha,
+            target_modules="all-linear",  # Target all linear layers
             lora_dropout=self.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
-            target_modules=[
-                "q_proj",
-                "k_proj",
-                "v_proj",
-                "o_proj",
-                "gate_proj",
-                "up_proj",
-                "down_proj",
-            ],
-            # Save embeddings and lm_head for better adaptation
-            modules_to_save=["embed_tokens", "lm_head"],
+            modules_to_save=["lm_head", "embed_tokens"],  # Save the lm_head and embed_tokens as you train the special tokens
         )
 
-        logger.info(f"LoRA config: r={self.lora_r}, alpha={self.lora_alpha}, dropout={self.lora_dropout}")
+        logger.info(f"LoRA config: r={self.lora_r}, alpha={self.lora_alpha}, dropout={self.lora_dropout}, target_modules='all-linear'")
 
-        # Wrap model with PEFT
-        model = get_peft_model(model, lora_config)
+        return lora_config
 
-        # Print trainable parameters
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in model.parameters())
-        trainable_pct = 100 * trainable_params / total_params
-
-        logger.info(f"Trainable parameters: {trainable_params:,} ({trainable_pct:.2f}%)")
-        logger.info(f"Total parameters: {total_params:,}")
-
-        return model
-
-    def load_training_data(self, tokenizer: AutoTokenizer) -> Dataset:
-        """Load and prepare training data from GCS"""
+    def load_training_data(self, tokenizer: AutoTokenizer) -> Dict[str, Dataset]:
+        """Load and prepare training data from GCS with train/test split"""
         logger.info("Loading training data...")
 
         # Download training data
@@ -340,15 +346,16 @@ class FineTuneJob:
         dataset = load_dataset('json', data_files=str(local_data_file), split='train')
         logger.info(f"Loaded {len(dataset)} training examples")
 
-        # Tokenize dataset
-        def tokenize_function(examples):
-            """Tokenize examples for causal language modeling"""
+        # Process dataset to extract text from different formats
+        def format_text(examples):
+            """Format examples to text field for SFTTrainer"""
+            texts = []
+
             # Handle different formats
             if "text" in examples:
                 texts = examples["text"]
             elif "messages" in examples:
                 # Convert chat messages to text
-                texts = []
                 for messages in examples["messages"]:
                     if isinstance(messages, str):
                         messages = json.loads(messages)
@@ -362,129 +369,106 @@ class FineTuneJob:
                     texts.append(text)
             elif "instruction" in examples:
                 # Instruction-following format
-                texts = []
                 for i in range(len(examples["instruction"])):
                     instruction = examples["instruction"][i]
                     output = examples.get("output", [""])[i]
                     text = f"Instruction: {instruction}\n\nResponse: {output}"
                     texts.append(text)
+            elif "input" in examples and "output" in examples:
+                # Input-output format
+                for i in range(len(examples["input"])):
+                    input_text = examples["input"][i]
+                    output_text = examples["output"][i]
+                    text = f"{input_text}\n{output_text}"
+                    texts.append(text)
             else:
-                raise ValueError("Dataset must have 'text', 'messages', or 'instruction' field")
+                raise ValueError("Dataset must have 'text', 'messages', 'instruction', or 'input'/'output' fields")
 
-            # Tokenize
-            result = tokenizer(
-                texts,
-                truncation=True,
-                max_length=self.max_seq_length,
-                padding=False,  # Don't pad here, let data collator handle it
-            )
+            return {"text": texts}
 
-            # For causal LM, labels are the same as input_ids
-            result["labels"] = result["input_ids"].copy()
-
-            return result
-
-        logger.info("Tokenizing dataset...")
-        tokenized_dataset = dataset.map(
-            tokenize_function,
+        logger.info("Formatting dataset...")
+        formatted_dataset = dataset.map(
+            format_text,
             batched=True,
             remove_columns=dataset.column_names,
-            desc="Tokenizing"
+            desc="Formatting"
         )
 
-        logger.info(f"Tokenized {len(tokenized_dataset)} examples")
-        return tokenized_dataset
+        # Split dataset into train and test (90/10 split)
+        logger.info("Splitting dataset into train and test sets...")
+        dataset_splits = formatted_dataset.train_test_split(test_size=0.1, seed=42)
 
-    def train(self, model: PeftModel, tokenizer: AutoTokenizer, train_dataset: Dataset):
-        """Train the model"""
+        logger.info(f"Train examples: {len(dataset_splits['train'])}")
+        logger.info(f"Test examples: {len(dataset_splits['test'])}")
+
+        return dataset_splits
+
+    def train(
+        self,
+        model: AutoModelForCausalLM,
+        train_dataset: Dataset,
+        eval_dataset: Dataset,
+        lora_config: LoraConfig
+    ):
+        """Train the model with SFTTrainer"""
         logger.info("Setting up training...")
 
-        # Initialize W&B if enabled
-        if self.use_wandb:
-            wandb.init(
-                project=self.wandb_project or "gemma-finetune",
-                name=self.wandb_run_name or self.output_model_name,
-                config={
-                    "base_model": self.base_model,
-                    "lora_r": self.lora_r,
-                    "lora_alpha": self.lora_alpha,
-                    "learning_rate": self.learning_rate,
-                    "epochs": self.num_train_epochs,
-                    "batch_size": self.per_device_train_batch_size,
-                    "gradient_accumulation_steps": self.gradient_accumulation_steps,
-                }
-            )
-
-        # Training arguments
-        training_args = TrainingArguments(
+        # SFT Training arguments (following cookbook approach)
+        training_args = SFTConfig(
             output_dir=str(self.local_output_dir),
             num_train_epochs=self.num_train_epochs,
             per_device_train_batch_size=self.per_device_train_batch_size,
-            gradient_accumulation_steps=self.gradient_accumulation_steps,
+            logging_strategy="epoch",
+            eval_strategy="epoch",
+            save_strategy="epoch",
             learning_rate=self.learning_rate,
-            warmup_steps=self.warmup_steps,
-            logging_steps=self.logging_steps,
-            save_steps=self.save_steps,
-            save_total_limit=2,  # Keep only 2 checkpoints to save space
-            fp16=self.fp16,
-            bf16=self.bf16,
-            optim="paged_adamw_8bit" if (self.use_4bit or self.use_8bit) else "adamw_torch",
-            lr_scheduler_type="cosine",
-            max_grad_norm=1.0,
-            report_to="wandb" if self.use_wandb else "none",
-            logging_first_step=True,
-            load_best_model_at_end=False,
-            ddp_find_unused_parameters=False,
-            group_by_length=True,  # Group sequences of similar length for efficiency
-            dataloader_num_workers=4,
-            remove_unused_columns=False,
+            lr_scheduler_type="constant",
+            max_length=self.max_seq_length,
+            gradient_checkpointing=False,
+            packing=False,
+            optim="adamw_torch_fused",
+            report_to="none",
+            weight_decay=0.01,
         )
 
-        # Data collator for language modeling
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
-            mlm=False,  # Causal LM, not masked LM
-        )
-
-        # Initialize trainer
-        trainer = Trainer(
+        # Initialize SFT trainer
+        trainer = SFTTrainer(
             model=model,
             args=training_args,
             train_dataset=train_dataset,
-            data_collator=data_collator,
+            eval_dataset=eval_dataset,
+            peft_config=lora_config,
         )
 
         # Train
         logger.info("Starting training...")
         logger.info(f"Training for {self.num_train_epochs} epochs")
-        logger.info(f"Total steps: {len(train_dataset) // (self.per_device_train_batch_size * self.gradient_accumulation_steps) * self.num_train_epochs}")
+        logger.info(f"Total training examples: {len(train_dataset)}")
+        logger.info(f"Total evaluation examples: {len(eval_dataset)}")
 
         trainer.train()
 
         logger.info("Training complete!")
 
-        # Finish W&B run
-        if self.use_wandb:
-            wandb.finish()
-
         return trainer
 
-    def save_model(self, model: PeftModel, tokenizer: AutoTokenizer):
+    def save_model(self, trainer: SFTTrainer, tokenizer: AutoTokenizer):
         """Save fine-tuned model and upload to GCS"""
         logger.info("Saving model...")
 
-        # Save model locally
-        model.save_pretrained(str(self.local_output_dir / "adapter"))
-        tokenizer.save_pretrained(str(self.local_output_dir / "adapter"))
+        # Save adapter model locally (trainer saves to output_dir by default)
+        adapter_dir = self.local_output_dir / "adapter"
+        trainer.save_model(str(adapter_dir))
+        tokenizer.save_pretrained(str(adapter_dir))
 
-        logger.info(f"Model saved locally to {self.local_output_dir / 'adapter'}")
+        logger.info(f"LoRA adapters saved locally to {adapter_dir}")
 
-        # Optionally merge adapters with base model for deployment
+        # Merge adapters with base model for deployment
         logger.info("Merging LoRA adapters with base model...")
-        merged_model = model.merge_and_unload()
+        model = trainer.model.merge_and_unload()
 
         merged_dir = self.local_output_dir / "merged"
-        merged_model.save_pretrained(str(merged_dir))
+        model.save_pretrained(str(merged_dir))
         tokenizer.save_pretrained(str(merged_dir))
 
         logger.info(f"Merged model saved to {merged_dir}")
@@ -492,7 +476,7 @@ class FineTuneJob:
         # Upload to GCS
         logger.info("Uploading adapter model to GCS...")
         self.upload_to_gcs(
-            self.local_output_dir / "adapter",
+            adapter_dir,
             f"{self.gcs_output_path}/adapter"
         )
 
@@ -532,20 +516,41 @@ class FineTuneJob:
             logger.info("Starting Fine-Tuning Job")
             logger.info("=" * 80)
 
+            # Update status: starting
+            self.update_job_status("running", "Initializing fine-tuning job", progress=0.0)
+
             # Load base model
+            self.update_job_status("running", "Loading base model", progress=0.1)
             model, tokenizer = self.load_base_model()
 
-            # Setup LoRA
-            model = self.setup_lora(model)
+            # Setup LoRA config
+            self.update_job_status("running", "Setting up LoRA configuration", progress=0.2)
+            lora_config = self.setup_lora()
 
             # Load training data
-            train_dataset = self.load_training_data(tokenizer)
+            self.update_job_status("running", "Loading training data", progress=0.3)
+            dataset_splits = self.load_training_data(tokenizer)
+            train_dataset = dataset_splits['train']
+            eval_dataset = dataset_splits['test']
 
             # Train
-            self.train(model, tokenizer, train_dataset)
+            self.update_job_status("running", "Training model", progress=0.4)
+            trainer = self.train(model, train_dataset, eval_dataset, lora_config)
 
             # Save model
-            self.save_model(model, tokenizer)
+            self.update_job_status("running", "Saving and uploading model", progress=0.9)
+            self.save_model(trainer, tokenizer)
+
+            # Complete
+            self.update_job_status(
+                "completed",
+                "Fine-tuning job completed successfully",
+                progress=1.0,
+                metadata={
+                    "output_path": f"gs://{self.gcs_bucket}/{self.gcs_output_path}",
+                    "model_name": self.output_model_name
+                }
+            )
 
             logger.info("=" * 80)
             logger.info("Fine-Tuning Job Complete!")
@@ -554,6 +559,7 @@ class FineTuneJob:
 
         except Exception as e:
             logger.error(f"Fine-tuning job failed: {e}", exc_info=True)
+            self.update_job_status("failed", "Fine-tuning job failed", error=str(e))
             raise
         finally:
             # Cleanup local cache to free disk space
@@ -564,7 +570,7 @@ class FineTuneJob:
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="Fine-tune Gemma models on Cloud Run")
+    parser = argparse.ArgumentParser(description="Fine-tune models on Cloud Run")
 
     # Required arguments
     parser.add_argument("--base-model", type=str, required=True,
@@ -579,6 +585,8 @@ def main():
                        help="GCS bucket name")
 
     # Optional arguments
+    parser.add_argument("--job-id", type=str, default=None,
+                       help="Job ID for tracking status in Firestore")
     parser.add_argument("--gcs-base-model-path", type=str, default=None,
                        help="Explicit GCS path to base model (overrides auto-detection from --base-model)")
     parser.add_argument("--gcs-output-path", type=str, default=None,
@@ -603,7 +611,7 @@ def main():
                        help="LoRA dropout")
 
     # Training parameters
-    parser.add_argument("--learning-rate", type=float, default=2e-4,
+    parser.add_argument("--learning-rate", type=float, default=5e-5,
                        help="Learning rate")
     parser.add_argument("--num-train-epochs", type=int, default=3,
                        help="Number of training epochs")
@@ -611,7 +619,7 @@ def main():
                        help="Batch size per device")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4,
                        help="Gradient accumulation steps")
-    parser.add_argument("--max-seq-length", type=int, default=512,
+    parser.add_argument("--max-seq-length", type=int, default=256,
                        help="Maximum sequence length")
     parser.add_argument("--warmup-steps", type=int, default=100,
                        help="Warmup steps")
@@ -626,14 +634,6 @@ def main():
     parser.add_argument("--bf16", action="store_true", default=True,
                        help="Use BF16 mixed precision (default for L4)")
 
-    # Weights & Biases
-    parser.add_argument("--use-wandb", action="store_true",
-                       help="Enable W&B logging")
-    parser.add_argument("--wandb-project", type=str, default=None,
-                       help="W&B project name")
-    parser.add_argument("--wandb-run-name", type=str, default=None,
-                       help="W&B run name")
-
     args = parser.parse_args()
 
     # Handle quantization flags
@@ -646,6 +646,7 @@ def main():
         output_model_name=args.output_model_name,
         training_data_path=args.training_data_path,
         gcs_bucket=args.gcs_bucket,
+        job_id=args.job_id,
         gcs_base_model_path=args.gcs_base_model_path,
         gcs_output_path=args.gcs_output_path,
         local_cache_dir=args.local_cache_dir,
@@ -664,9 +665,6 @@ def main():
         save_steps=args.save_steps,
         fp16=args.fp16,
         bf16=args.bf16,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_run_name=args.wandb_run_name,
     )
 
     job.run()
