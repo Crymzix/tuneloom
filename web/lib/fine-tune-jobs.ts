@@ -23,6 +23,8 @@ export type FineTuneJobStatus = 'queued' | 'running' | 'completed' | 'failed';
 export interface FineTuneJob {
     id: string;
     userId: string;
+    modelId: string;
+    modelName: string;
     config: {
         baseModel: string;
         outputModelName: string;
@@ -38,6 +40,7 @@ export interface FineTuneJob {
     completedAt?: Date;
     failedAt?: Date;
     error?: string;
+    apiKeyId?: string;
     inferenceUrl?: string;
     cloudRunJobName?: string;
 }
@@ -63,6 +66,8 @@ function docToJob(doc: any): FineTuneJob {
     return {
         id: doc.id,
         userId: data.userId,
+        modelId: data.modelId,
+        modelName: data.modelName,
         config: data.config,
         status: data.status,
         progress: data.progress || 0,

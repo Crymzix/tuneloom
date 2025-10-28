@@ -21,7 +21,11 @@ export class FineTuneController {
      * Start a new fine-tune job
      * POST /api/fine-tune/start
      *
-     * Ensures only one running job per user using Firestore transaction.
+     * Uses a single Firestore transaction to:
+     * 1. Check/create model (ensuring model name uniqueness per user)
+     * 2. Verify no running jobs exist for this user
+     * 3. Create the fine-tune job
+     *
      * The job is queued asynchronously in the background, allowing the API to return immediately.
      */
     static async startFineTune(c: AuthContext): Promise<Response> {
@@ -50,7 +54,50 @@ export class FineTuneController {
 
         try {
             const result = await firestore.runTransaction(async (transaction) => {
-                // Query for any running jobs for this user
+                // 1. Check/create model
+                const modelsRef = firestore.collection('models');
+                const modelQuery = modelsRef
+                    .where('name', '==', body.modelName)
+                    .limit(1);
+                const modelSnapshot = await transaction.get(modelQuery);
+
+                let modelId: string;
+
+                if (!modelSnapshot.empty) {
+                    // Model with this name exists
+                    const existingDoc = modelSnapshot.docs[0];
+                    const existingData = existingDoc.data();
+
+                    if (existingData.userId === user.uid) {
+                        // Model exists and belongs to this user
+                        modelId = existingDoc.id;
+                    } else {
+                        // Model exists but belongs to different user
+                        throw new ApiError(
+                            409,
+                            `Model name "${body.modelName}" is already taken by another user. Please choose a different name.`,
+                            'Conflict'
+                        );
+                    }
+                } else {
+                    // Model doesn't exist, create it
+                    const now = new Date();
+                    const newModelRef = modelsRef.doc();
+
+                    const modelData = {
+                        userId: user.uid,
+                        name: body.modelName,
+                        baseModel: body.baseModel,
+                        status: 'active',
+                        createdAt: now,
+                        updatedAt: now,
+                    };
+
+                    transaction.set(newModelRef, modelData);
+                    modelId = newModelRef.id;
+                }
+
+                // 2. Check for any running jobs for this user
                 const jobsRef = firestore.collection('fine-tune-jobs');
                 const runningJobsQuery = jobsRef
                     .where('userId', '==', user.uid)
@@ -58,7 +105,6 @@ export class FineTuneController {
 
                 const runningJobsSnapshot = await transaction.get(runningJobsQuery);
 
-                // Check if user already has a running job
                 if (!runningJobsSnapshot.empty) {
                     const runningJob = runningJobsSnapshot.docs[0].data();
                     throw new ApiError(
@@ -68,6 +114,7 @@ export class FineTuneController {
                     );
                 }
 
+                // 3. Create the fine-tune job
                 const newJobRef = jobsRef.doc();
                 const now = new Date();
 
@@ -82,6 +129,7 @@ export class FineTuneController {
 
                 const newJob: Omit<FineTuneJob, 'id'> = {
                     userId: user.uid,
+                    modelId: modelId,
                     config: jobConfig,
                     status: 'queued',
                     progress: 0,

@@ -85,6 +85,7 @@ export interface FineTuneJobConfig {
 export interface FineTuneJob {
     id: string;
     userId: string;
+    modelId: string;
     config: FineTuneJobConfig;
     status: FineTuneJobStatus;
     progress: number;
@@ -99,14 +100,33 @@ export interface FineTuneJob {
 }
 
 /**
+ * Model document stored in Firestore
+ * Represents a fine-tuned model owned by a user
+ */
+export interface Model {
+    id: string;
+    userId: string;
+    name: string;
+    baseModel: string;
+    status: 'active' | 'archived';
+    createdAt: Date;
+    updatedAt: Date;
+    metadata?: {
+        description?: string;
+        tags?: string[];
+    };
+}
+
+/**
  * Model API key document
- * 
+ *
  */
 export interface ModelApiKey {
     keyId: string;
     keyHash: string;
     userId: string;
     modelId: string;
+    modelName: string;
     type: 'fine-tuned' | 'base';
     createdAt: Date;
     lastUsedAt: Date | null;

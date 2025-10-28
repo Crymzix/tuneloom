@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useCompletion } from '@ai-sdk/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,21 +12,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
 import { interFont } from '../../lib/utils'
-import { saveTrainingData, loadTrainingData } from '@/lib/training-data-storage'
-import { syncTrainingDataToGCS, loadTrainingDataFromGCS } from '@/lib/training-data-sync'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useModelStore } from '@/lib/store/model-store'
 import { Badge } from '../ui/badge'
 import { useAuth } from '@/contexts/auth-context'
-
-interface TrainingDataRow {
-    input: string
-    output: string
-}
+import { useTrainingData, useSaveTrainingData, TrainingDataRow } from '@/hooks/use-training-data'
+import { useDebounce } from '@/hooks/use-debounce'
 
 function TrainingDataInput() {
     const { selectedModel, _hasHydrated } = useModelStore()
     const { user } = useAuth()
+
+    // React Query hooks
+    const { data: loadedData = [], isLoading: isLoadingData } = useTrainingData()
+    const saveTrainingDataMutation = useSaveTrainingData()
+
+    // Local state for current rows (synced with query data)
     const [rows, setRows] = useState<TrainingDataRow[]>([
         { input: '', output: '' },
         { input: '', output: '' },
@@ -34,18 +35,16 @@ function TrainingDataInput() {
     ])
     const [isGeneratePromptDialogOpen, setIsGeneratePromptDialogOpen] = useState(false)
     const [generationPrompt, setGenerationPrompt] = useState('')
-    const [isDataLoaded, setIsDataLoaded] = useState(false)
-    const [isSaving, setIsSaving] = useState(false)
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const scrollAreaRef = useRef<HTMLDivElement>(null)
-    const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-    const isLoadingRef = useRef(false)
+    const hasInitializedRef = useRef(false)
 
     const { complete, completion, isLoading } = useCompletion({
         api: '/api/generate-training-data',
     })
+
+    const debouncedRows = useDebounce(rows, 1000)
 
     const rowVirtualizer = useVirtualizer({
         count: rows.length,
@@ -58,119 +57,55 @@ function TrainingDataInput() {
         return rows.filter(row => row.input.trim() !== '' || row.output.trim() !== '').length
     }, [rows])
 
-    useEffect(() => {
-        // Immediately clear rows and block saves when model changes
-        isLoadingRef.current = true
-        setIsDataLoaded(false)
-        setRows([
-            { input: '', output: '' },
-            { input: '', output: '' },
-            { input: '', output: '' },
-        ])
-        loadCachedData()
-    }, [selectedModel?.hf_id, _hasHydrated, user])
+    const saveStatus = useMemo(() => {
+        if (saveTrainingDataMutation.isPending) {
+            return 'saving'
+        }
+        if (saveTrainingDataMutation.isSuccess && !saveTrainingDataMutation.isPending) {
+            return 'saved'
+        }
+        return 'idle'
+    }, [saveTrainingDataMutation.isPending, saveTrainingDataMutation.isSuccess])
 
     useEffect(() => {
-        // Only save if data is loaded AND we're not currently loading new data
-        if (isDataLoaded && selectedModel && !isLoadingRef.current) {
-            saveData()
+        if (!isLoadingData && loadedData.length > 0) {
+            setRows(loadedData)
+            hasInitializedRef.current = true
+        } else if (!isLoadingData && loadedData.length === 0 && !hasInitializedRef.current) {
+            // Only reset to empty if we've never initialized
+            setRows([
+                { input: '', output: '' },
+                { input: '', output: '' },
+                { input: '', output: '' },
+            ])
+            hasInitializedRef.current = true
         }
-    }, [rows, isDataLoaded, selectedModel?.hf_id, user])
+    }, [loadedData, isLoadingData])
+
+    useEffect(() => {
+        hasInitializedRef.current = false
+    }, [selectedModel?.hf_id])
+
+    useEffect(() => {
+        if (hasInitializedRef.current && !isLoadingData) {
+            saveTrainingDataMutation.mutate(debouncedRows)
+        }
+    }, [debouncedRows])
+
+    useEffect(() => {
+        if (saveStatus === 'saved') {
+            const timeout = setTimeout(() => {
+                saveTrainingDataMutation.reset()
+            }, 2000)
+            return () => clearTimeout(timeout)
+        }
+    }, [saveStatus])
 
     useEffect(() => {
         if (!isLoading && completion) {
             setGeneratedData()
         }
     }, [completion, isLoading])
-
-    useEffect(() => {
-        return () => {
-            if (syncTimeoutRef.current) {
-                clearTimeout(syncTimeoutRef.current)
-            }
-        }
-    }, [])
-
-    const saveData = async () => {
-        try {
-            // Set saving status
-            setSaveStatus('saving')
-            setIsSaving(true)
-
-            await saveTrainingData(selectedModel.hf_id, rows)
-
-            if (syncTimeoutRef.current) {
-                clearTimeout(syncTimeoutRef.current)
-            }
-
-            // Debounce GCS sync for non-anonymous users (1 second delay)
-            if (user && !user.isAnonymous) {
-                syncTimeoutRef.current = setTimeout(async () => {
-                    try {
-                        await syncTrainingDataToGCS(user, selectedModel.hf_id, rows)
-                        setSaveStatus('saved')
-                        // Reset to idle after showing "saved" for 2 seconds
-                        setTimeout(() => {
-                            setSaveStatus('idle')
-                            setIsSaving(false)
-                        }, 2000)
-                    } catch (error) {
-                        console.error('Background GCS sync failed:', error)
-                        setSaveStatus('idle')
-                        setIsSaving(false)
-                    }
-                }, 1000)
-            } else {
-                // For anonymous users, just show saved immediately
-                setSaveStatus('saved')
-                setTimeout(() => {
-                    setSaveStatus('idle')
-                    setIsSaving(false)
-                }, 2000)
-            }
-        } catch (error) {
-            console.error('Failed to save training data:', error)
-            setSaveStatus('idle')
-            setIsSaving(false)
-        }
-    }
-
-    const loadCachedData = async () => {
-        if (!_hasHydrated || !selectedModel) {
-            return
-        }
-
-        try {
-            // Try loading from GCS first for authenticated users
-            let cachedData: TrainingDataRow[] | null = null
-
-            if (user && !user.isAnonymous) {
-                cachedData = await loadTrainingDataFromGCS(user, selectedModel.hf_id)
-            }
-
-            // Fall back to IndexedDB if GCS doesn't have data
-            if (!cachedData || cachedData.length === 0) {
-                cachedData = await loadTrainingData(selectedModel.hf_id)
-            }
-
-            if (cachedData && cachedData.length > 0) {
-                setRows(cachedData)
-            } else {
-                // Reset to empty rows when switching to a model with no data
-                setRows([
-                    { input: '', output: '' },
-                    { input: '', output: '' },
-                    { input: '', output: '' },
-                ])
-            }
-        } catch (error) {
-            console.error('Failed to load cached training data:', error)
-        } finally {
-            // Allow saves now that loading is complete
-            isLoadingRef.current = false
-            setIsDataLoaded(true)
-        }
-    }
 
     const setGeneratedData = () => {
         try {

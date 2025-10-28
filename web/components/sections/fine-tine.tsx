@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { formatDate, interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -21,12 +21,13 @@ import {
 import { useModelStore } from '../../lib/store'
 import { useAuth } from '../../contexts/auth-context'
 import { AuthDialog } from '../auth-dialog'
-import { subscribeToUserJobs, FineTuneJob as FirestoreFineTuneJob } from '../../lib/fine-tune-jobs'
+import { FineTuneJob as FirestoreFineTuneJob } from '../../lib/fine-tune-jobs'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty'
-import { toast } from 'sonner'
 import { Skeleton } from '../ui/skeleton'
 import { Progress } from '../ui/progress'
 import { ScrollArea } from '../ui/scroll-area'
+import { useCheckModelName, useStartFineTune, useUserJobs } from '../../hooks/use-fine-tune'
+import { useDebounce } from '../../hooks/use-debounce'
 
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
 
@@ -39,7 +40,7 @@ interface FineTuneJob {
     createdAt: string
     completedAt?: string
     inferenceUrl?: string
-    apiKey?: string
+    apiKeyId?: string
 }
 
 // Convert Firestore job to component job format
@@ -53,7 +54,7 @@ function convertFirestoreJob(firestoreJob: FirestoreFineTuneJob): FineTuneJob {
         createdAt: formatDate(firestoreJob.createdAt),
         completedAt: firestoreJob.completedAt ? formatDate(firestoreJob.completedAt) : undefined,
         inferenceUrl: firestoreJob.inferenceUrl,
-        apiKey: undefined, // API keys are not stored in Firestore for security
+        apiKeyId: firestoreJob.apiKeyId,
     }
 }
 
@@ -62,19 +63,28 @@ type ModelNameStatus = 'idle' | 'checking' | 'available' | 'unavailable' | 'inva
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
-    const [modelNameStatus, setModelNameStatus] = useState<ModelNameStatus>('idle')
-    const [modelNameError, setModelNameError] = useState<string>('')
-    const [jobs, setJobs] = useState<FineTuneJob[]>([])
-    const [loadingJobs, setLoadingJobs] = useState(true)
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
     const [copiedApiKey, setCopiedApiKey] = useState<string | null>(null)
     const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
     const [showCodeExample, setShowCodeExample] = useState<Record<string, boolean>>({})
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
-    const [isStarting, setIsStarting] = useState(false)
     const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
 
     const selectedModelCompany = getSelectedModelCompany()
+    const debouncedModelName = useDebounce(modelName, 500)
+
+    const startFineTuneMutation = useStartFineTune()
+    const {
+        data: modelNameCheck,
+        isLoading: isCheckingModelName,
+        error: modelNameCheckError,
+    } = useCheckModelName(debouncedModelName, debouncedModelName.length > 0)
+
+    const { data: firestoreJobs = [], isLoading: loadingJobs } = useUserJobs()
+
+    const jobs = useMemo(() => {
+        return firestoreJobs.map(convertFirestoreJob)
+    }, [firestoreJobs])
 
     const hasQueuedJobs = useMemo(() => {
         return jobs.some(job => job.status === 'queued')
@@ -83,6 +93,8 @@ function FineTune() {
     const hasRunningJobs = useMemo(() => {
         return jobs.some(job => job.status === 'running')
     }, [jobs]);
+
+    const isStarting = startFineTuneMutation.isPending || hasQueuedJobs || hasRunningJobs
 
     const validateModelNameFormat = (name: string): { valid: boolean; error?: string } => {
         if (!name || name.length === 0) {
@@ -112,93 +124,47 @@ function FineTune() {
         return { valid: true }
     }
 
-    const checkModelNameAvailability = useCallback(async (name: string) => {
-        if (!name) {
-            setModelNameStatus('idle')
-            setModelNameError('')
-            return
+    const { modelNameStatus, modelNameError } = useMemo(() => {
+        if (!modelName) {
+            return { modelNameStatus: 'idle' as const, modelNameError: '' }
         }
 
-        const formatValidation = validateModelNameFormat(name)
+        const formatValidation = validateModelNameFormat(modelName)
         if (!formatValidation.valid) {
-            setModelNameStatus('invalid')
-            setModelNameError(formatValidation.error || '')
-            return
+            return {
+                modelNameStatus: 'invalid' as const,
+                modelNameError: formatValidation.error || '',
+            }
         }
 
-        setModelNameStatus('checking')
-        setModelNameError('')
+        if (debouncedModelName !== modelName) {
+            return { modelNameStatus: 'checking' as const, modelNameError: '' }
+        }
 
-        try {
-            const token = await user?.getIdToken()
-            const response = await fetch(`/api/check-model-name?name=${encodeURIComponent(name)}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            })
+        if (isCheckingModelName) {
+            return { modelNameStatus: 'checking' as const, modelNameError: '' }
+        }
 
-            const data = await response.json()
-
-            if (!response.ok) {
-                setModelNameStatus('invalid')
-                setModelNameError(data.error || 'Failed to check availability')
-                return
+        if (modelNameCheckError) {
+            return {
+                modelNameStatus: 'invalid' as const,
+                modelNameError: 'Failed to check availability',
             }
+        }
 
-            if (data.available) {
-                setModelNameStatus('available')
-                setModelNameError('')
+        if (modelNameCheck) {
+            if (modelNameCheck.available) {
+                return { modelNameStatus: 'available' as const, modelNameError: '' }
             } else {
-                setModelNameStatus('unavailable')
-                setModelNameError('This model name is already taken')
+                return {
+                    modelNameStatus: 'unavailable' as const,
+                    modelNameError: 'This model name is already taken',
+                }
             }
-        } catch (error) {
-            console.error('Error checking model name:', error)
-            setModelNameStatus('invalid')
-            setModelNameError('Failed to check availability')
-        }
-    }, [user])
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            if (modelName) {
-                checkModelNameAvailability(modelName)
-            } else {
-                setModelNameStatus('idle')
-                setModelNameError('')
-            }
-        }, 500) // 500ms debounce
-
-        return () => clearTimeout(timeoutId)
-    }, [modelName, checkModelNameAvailability])
-
-    useEffect(() => {
-        if (!user || user.isAnonymous) {
-            setJobs([])
-            setLoadingJobs(false)
-            return
         }
 
-        const unsubscribe = subscribeToUserJobs(
-            user.uid,
-            (firestoreJobs) => {
-                const convertedJobs = firestoreJobs.map(convertFirestoreJob)
-                setJobs(convertedJobs)
-                setLoadingJobs(false)
-            },
-            (error) => {
-                console.error('Error loading fine-tune jobs:', error)
-                setLoadingJobs(false)
-            }
-        )
-
-        return () => unsubscribe()
-    }, [user])
-
-    useEffect(() => {
-        const hasActiveJob = jobs.some(job => job.status === 'queued' || job.status === 'running');
-        setIsStarting(hasActiveJob);
-    }, [jobs]);
+        return { modelNameStatus: 'idle' as const, modelNameError: '' }
+    }, [modelName, debouncedModelName, isCheckingModelName, modelNameCheck, modelNameCheckError])
 
     const handleCopyUrl = (url: string, jobId: string) => {
         navigator.clipboard.writeText(url)
@@ -237,53 +203,22 @@ function FineTune() {
         startFineTune()
     }
 
-    const startFineTune = async () => {
+    const startFineTune = () => {
         if (!user || !selectedModel) {
             return;
         }
 
-        setIsStarting(true);
-
-        try {
-            const token = await user.getIdToken();
-            const response = await fetch('/api/fine-tune/start', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
+        startFineTuneMutation.mutate(
+            {
+                modelName,
+                baseModel: selectedModel.hf_id,
+            },
+            {
+                onSuccess: () => {
+                    setModelName('');
                 },
-                body: JSON.stringify({
-                    modelName,
-                    baseModel: selectedModel.hf_id,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                console.error('Error starting fine-tune:', data.error || data.message);
-                toast.error('Failed to start fine-tune job', {
-                    description: data.error || data.message || 'Please try again later.'
-                });
-                // Reset isStarting on error since no job was created
-                setIsStarting(false);
-                return;
             }
-
-            setModelName('');
-            toast.success('Fine-tune job started', {
-                description: `Your model "${modelName}" is now queued for training`
-            });
-            // Note: isStarting will remain true and be managed by the useEffect
-            // that monitors job statuses (queued/running jobs keep it true)
-        } catch (error) {
-            console.error('Error starting fine-tune:', error);
-            toast.error('Failed to start fine-tune job', {
-                description: 'An unexpected error occurred. Please try again.'
-            });
-            // Reset isStarting on error since no job was created
-            setIsStarting(false);
-        }
+        );
     }
 
     const getStatusIcon = (status: JobStatus) => {
@@ -487,14 +422,14 @@ function FineTune() {
                                                             </div>
 
                                                             {/* API Key */}
-                                                            {job.apiKey && (
+                                                            {job.apiKeyId && (
                                                                 <div className="space-y-2">
                                                                     <p className="text-xs font-medium text-muted-foreground">
                                                                         API Key
                                                                     </p>
                                                                     <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
                                                                         <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                            {showApiKey[job.id] ? job.apiKey : maskApiKey(job.apiKey)}
+                                                                            {showApiKey[job.id] ? job.apiKeyId : maskApiKey(job.apiKeyId)}
                                                                         </code>
                                                                         <div className="flex gap-1">
                                                                             <Tooltip>
@@ -522,7 +457,7 @@ function FineTune() {
                                                                                         variant="ghost"
                                                                                         size="icon-sm"
                                                                                         className="size-7 hover:bg-slate-700"
-                                                                                        onClick={() => handleCopyApiKey(job.apiKey!, job.id)}
+                                                                                        onClick={() => handleCopyApiKey(job.apiKeyId!, job.id)}
                                                                                     >
                                                                                         {copiedApiKey === job.id ? (
                                                                                             <CheckCircle2 className="size-3 text-green-400" />
@@ -565,7 +500,7 @@ function FineTune() {
 # Initialize the client with your fine-tuned model
 client = OpenAI(
     base_url="${job.inferenceUrl}",
-    api_key="${job.apiKey ? maskApiKey(job.apiKey) : 'your-api-key'}"
+    api_key="${job.apiKeyId ? maskApiKey(job.apiKeyId) : 'your-api-key'}"
 )
 
 # Make a request to your fine-tuned model
@@ -590,7 +525,7 @@ print(response.choices[0].message.content)`}</code>
 # Initialize the client with your fine-tuned model
 client = OpenAI(
     base_url="${job.inferenceUrl}",
-    api_key="${job.apiKey || 'your-api-key'}"
+    api_key="${job.apiKeyId || 'your-api-key'}"
 )
 
 # Make a request to your fine-tuned model

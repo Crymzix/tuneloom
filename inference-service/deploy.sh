@@ -41,7 +41,7 @@ if [ -z "$PROJECT_ID" ]; then
 fi
 
 if [ -z "$BUCKET_NAME" ]; then
-    BUCKET_NAME="${PROJECT_ID}-models"
+    BUCKET_NAME="${PROJECT_ID}.firebasestorage.app"
     echo -e "${YELLOW}Using default bucket name: ${BUCKET_NAME}${NC}"
 fi
 

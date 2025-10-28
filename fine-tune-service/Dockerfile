@@ -39,6 +39,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
+COPY __init__.py .
+COPY __main__.py .
+COPY config.py .
+COPY storage.py .
+COPY job_tracker.py .
+COPY model_manager.py .
+COPY data_manager.py .
+COPY trainer.py .
 COPY fine_tune_job.py .
 
 # Set environment variables for optimal GPU performance
@@ -59,5 +67,5 @@ RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app /tmp/finetune
 USER appuser
 
-# Entry point
-ENTRYPOINT ["python", "fine_tune_job.py"]
+# Entry point - run as a module
+ENTRYPOINT ["python", "-m", "__main__"]

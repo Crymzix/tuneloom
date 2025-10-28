@@ -31,6 +31,7 @@ export async function queueFineTuneJob(jobId: string) {
         await generateApiKeyForModel(
             jobId,
             jobData.config.outputModelName,
+            jobData.modelId,
             jobData.userId
         );
 
@@ -140,7 +141,7 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
     }
 }
 
-async function generateApiKeyForModel(jobId: string, modelName: string, userId: string) {
+async function generateApiKeyForModel(jobId: string, modelName: string, modelId: string, userId: string) {
     "use step";
     const firestore = getAdminFirestore();
 
@@ -154,7 +155,8 @@ async function generateApiKeyForModel(jobId: string, modelName: string, userId: 
         .set({
             keyHash,
             userId,
-            modelId: modelName,
+            modelId,
+            modelName,
             createdAt: new Date(),
             lastUsedAt: null,
             expiresAt: null,
@@ -163,8 +165,7 @@ async function generateApiKeyForModel(jobId: string, modelName: string, userId: 
         } as ModelApiKey)
 
     await firestore.collection('fine-tune-jobs').doc(jobId).update({
-        apiKey: keyId,
-        apiKeySecret: keySecret,
+        apiKeyId: keyId,
         inferenceUrl: `${process.env.OPENAI_COMPATIBLE_BASE_URL}/${modelName}`
     });
 
