@@ -2,7 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth-context'
 import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
-import { subscribeToUserJobs, FineTuneJob as FirestoreFineTuneJob } from '@/lib/fine-tune-jobs'
+import {
+    subscribeToUserJobs,
+    subscribeToUserModelsByBaseModel,
+    FineTuneJob as FirestoreFineTuneJob,
+    UserModel
+} from '@/lib/fine-tune-jobs'
 
 interface CheckModelNameResponse {
     available: boolean
@@ -11,7 +16,8 @@ interface CheckModelNameResponse {
 }
 
 interface StartFineTuneRequest {
-    modelName: string
+    modelName?: string
+    modelId?: string
     baseModel: string
 }
 
@@ -24,6 +30,14 @@ interface StartFineTuneResponse {
 interface StartFineTuneErrorResponse {
     error?: string
     message?: string
+}
+
+interface GetApiKeyResponse {
+    keyId: string
+    keySecret: string
+    modelName: string
+    createdAt: Date
+    isActive: boolean
 }
 
 /**
@@ -107,6 +121,94 @@ export function useCheckModelName(modelName: string, enabled: boolean = true) {
         },
         enabled: enabled && !!modelName && !!user,
         staleTime: 30 * 1000, // 30 seconds
+        retry: 1,
+    })
+}
+
+/**
+ * Hook to fetch user's models filtered by baseModel with real-time updates
+ */
+export function useUserModelsByBaseModel(baseModel: string) {
+    const { user } = useAuth()
+    const queryClient = useQueryClient()
+    const [hasReceivedFirstUpdate, setHasReceivedFirstUpdate] = useState(false)
+
+    const query = useQuery({
+        queryKey: ['user-models-by-base', user?.uid, baseModel],
+        queryFn: async () => {
+            return [] as UserModel[]
+        },
+        enabled: !!user && !user.isAnonymous && !!baseModel,
+        staleTime: Infinity,
+    })
+
+    useEffect(() => {
+        if (!user || user.isAnonymous || !baseModel) {
+            queryClient.setQueryData(['user-models-by-base', user?.uid, baseModel], [])
+            setHasReceivedFirstUpdate(false)
+            return
+        }
+
+        // Reset the flag when user or baseModel changes
+        setHasReceivedFirstUpdate(false)
+
+        const unsubscribe = subscribeToUserModelsByBaseModel(
+            user.uid,
+            baseModel,
+            (userModels) => {
+                queryClient.setQueryData(['user-models-by-base', user.uid, baseModel], userModels)
+                setHasReceivedFirstUpdate(true)
+            },
+            (error) => {
+                console.error('Error loading user models by baseModel:', error)
+                setHasReceivedFirstUpdate(true)
+            }
+        )
+
+        return () => unsubscribe()
+    }, [user, baseModel, queryClient])
+
+    return {
+        ...query,
+        isLoading: query.isLoading || !hasReceivedFirstUpdate,
+    }
+}
+
+/**
+ * Hook to fetch the decrypted API key for a given keyId
+ */
+export function useGetApiKey(keyId: string | undefined, enabled: boolean = false) {
+    const { user } = useAuth()
+
+    return useQuery({
+        queryKey: ['api-key', keyId],
+        queryFn: async () => {
+            if (!keyId) {
+                throw new Error('API key ID is required')
+            }
+
+            if (!user) {
+                throw new Error('User not authenticated')
+            }
+
+            const token = await user.getIdToken()
+            const response = await fetch(`/api/fine-tune/api-key/${keyId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                const errorMessage = data.error || data.message || 'Failed to retrieve API key'
+                throw new Error(errorMessage)
+            }
+
+            return data as GetApiKeyResponse
+        },
+        enabled: enabled && !!keyId && !!user,
+        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
         retry: 1,
     })
 }

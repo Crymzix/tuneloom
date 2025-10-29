@@ -5,17 +5,101 @@ import {
     StartFineTuneRequest,
     StartFineTuneResponse,
     FineTuneJob,
-    FineTuneJobConfig
+    FineTuneJobConfig,
+    Model,
+    ModelApiKey
 } from '../types';
 import { getStorage } from 'firebase-admin/storage';
 import { start } from 'workflow/api';
 import { queueFineTuneJob } from '../workflows/fine-tune-workflow';
+import { decrypt } from '../utils/encryption';
 
 /**
  * Fine-tune Controller
  * Handles fine-tuning requests
  */
 export class FineTuneController {
+
+    /**
+     * Get decrypted API key for a specific API key ID
+     * GET /api/fine-tune/api-key/:keyId
+     *
+     * Returns the actual API key secret (decrypted) for the user to view
+     * Only the owner of the API key can retrieve it
+     */
+    static async getApiKey(c: AuthContext): Promise<Response> {
+        const user = c.get('user');
+
+        // Check authentication
+        if (!user) {
+            throw new ApiError(
+                401,
+                'Authentication required',
+                'Unauthorized'
+            );
+        }
+
+        const keyId = c.req.param('keyId');
+
+        if (!keyId) {
+            throw new ApiError(
+                400,
+                'API key ID is required',
+                'Bad Request'
+            );
+        }
+
+        try {
+            const firestore = getAdminFirestore();
+
+            // Fetch the API key document
+            const keyDoc = await firestore
+                .collection('api-keys')
+                .doc(keyId)
+                .get();
+
+            if (!keyDoc.exists) {
+                throw new ApiError(
+                    404,
+                    'API key not found',
+                    'Not Found'
+                );
+            }
+
+            const keyData = keyDoc.data() as ModelApiKey;
+
+            // Verify ownership
+            if (keyData.userId !== user.uid) {
+                throw new ApiError(
+                    403,
+                    'You do not have permission to access this API key',
+                    'Forbidden'
+                );
+            }
+
+            // Decrypt the key secret
+            const keySecret = decrypt(keyData.keySecretEncrypted);
+
+            return c.json({
+                keyId: keyData.keyId,
+                keySecret,
+                modelName: keyData.modelName,
+                createdAt: keyData.createdAt,
+                isActive: keyData.isActive,
+            });
+        } catch (error) {
+            if (error instanceof ApiError) {
+                throw error;
+            }
+
+            console.error('Error retrieving API key:', error);
+            throw new ApiError(
+                500,
+                'Failed to retrieve API key',
+                'Internal Server Error'
+            );
+        }
+    }
 
     /**
      * Start a new fine-tune job
@@ -61,42 +145,6 @@ export class FineTuneController {
                     .limit(1);
                 const modelSnapshot = await transaction.get(modelQuery);
 
-                let modelId: string;
-
-                if (!modelSnapshot.empty) {
-                    // Model with this name exists
-                    const existingDoc = modelSnapshot.docs[0];
-                    const existingData = existingDoc.data();
-
-                    if (existingData.userId === user.uid) {
-                        // Model exists and belongs to this user
-                        modelId = existingDoc.id;
-                    } else {
-                        // Model exists but belongs to different user
-                        throw new ApiError(
-                            409,
-                            `Model name "${body.modelName}" is already taken by another user. Please choose a different name.`,
-                            'Conflict'
-                        );
-                    }
-                } else {
-                    // Model doesn't exist, create it
-                    const now = new Date();
-                    const newModelRef = modelsRef.doc();
-
-                    const modelData = {
-                        userId: user.uid,
-                        name: body.modelName,
-                        baseModel: body.baseModel,
-                        status: 'active',
-                        createdAt: now,
-                        updatedAt: now,
-                    };
-
-                    transaction.set(newModelRef, modelData);
-                    modelId = newModelRef.id;
-                }
-
                 // 2. Check for any running jobs for this user
                 const jobsRef = firestore.collection('fine-tune-jobs');
                 const runningJobsQuery = jobsRef
@@ -114,7 +162,46 @@ export class FineTuneController {
                     );
                 }
 
-                // 3. Create the fine-tune job
+                // 3. Create model if needed (after all reads are complete)
+                let model: Model
+
+                if (!modelSnapshot.empty) {
+                    // Model with this name exists
+                    const existingDoc = modelSnapshot.docs[0];
+                    const existingData = existingDoc.data();
+
+                    if (existingData.userId === user.uid) {
+                        model = {
+                            ...existingData,
+                            id: existingDoc.id,
+                        } as Model;
+                    } else {
+                        throw new ApiError(
+                            409,
+                            `Model name "${body.modelName}" is already taken by another user. Please choose a different name.`,
+                            'Conflict'
+                        );
+                    }
+                } else {
+                    // Model doesn't exist, create it
+                    const now = new Date();
+                    const newModelRef = modelsRef.doc();
+
+                    const modelData = {
+                        id: newModelRef.id,
+                        userId: user.uid,
+                        name: body.modelName,
+                        baseModel: body.baseModel,
+                        status: 'active',
+                        createdAt: now,
+                        updatedAt: now,
+                    };
+
+                    transaction.set(newModelRef, modelData);
+                    model = modelData as Model;
+                }
+
+                // 4. Create the fine-tune job
                 const newJobRef = jobsRef.doc();
                 const now = new Date();
 
@@ -122,14 +209,14 @@ export class FineTuneController {
                 const trainingDataPath = `training-data/${user.uid}/${body.baseModel.replace('/', '-')}`;
                 const jobConfig: FineTuneJobConfig = {
                     baseModel: body.baseModel,
-                    outputModelName: body.modelName,
+                    outputModelName: model.name,
                     trainingDataPath,
                     gcsBucket: bucket.name,
                 };
 
                 const newJob: Omit<FineTuneJob, 'id'> = {
                     userId: user.uid,
-                    modelId: modelId,
+                    modelId: model.id,
                     config: jobConfig,
                     status: 'queued',
                     progress: 0,

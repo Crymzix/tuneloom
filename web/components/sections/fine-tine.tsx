@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { formatDate, interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -13,10 +13,10 @@ import {
     AlertCircle,
     Copy,
     BrainIcon,
-    Code2,
     Eye,
     EyeOff,
-    XCircle
+    XCircle,
+    XIcon
 } from 'lucide-react'
 import { useModelStore } from '../../lib/store'
 import { useAuth } from '../../contexts/auth-context'
@@ -26,7 +26,8 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '..
 import { Skeleton } from '../ui/skeleton'
 import { Progress } from '../ui/progress'
 import { ScrollArea } from '../ui/scroll-area'
-import { useCheckModelName, useStartFineTune, useUserJobs } from '../../hooks/use-fine-tune'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { useCheckModelName, useStartFineTune, useUserJobs, useUserModelsByBaseModel, useGetApiKey } from '../../hooks/use-fine-tune'
 import { useDebounce } from '../../hooks/use-debounce'
 
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
@@ -39,8 +40,6 @@ interface FineTuneJob {
     progress: number
     createdAt: string
     completedAt?: string
-    inferenceUrl?: string
-    apiKeyId?: string
 }
 
 // Convert Firestore job to component job format
@@ -53,25 +52,26 @@ function convertFirestoreJob(firestoreJob: FirestoreFineTuneJob): FineTuneJob {
         progress: firestoreJob.progress,
         createdAt: formatDate(firestoreJob.createdAt),
         completedAt: firestoreJob.completedAt ? formatDate(firestoreJob.completedAt) : undefined,
-        inferenceUrl: firestoreJob.inferenceUrl,
-        apiKeyId: firestoreJob.apiKeyId,
     }
 }
-
-type ModelNameStatus = 'idle' | 'checking' | 'available' | 'unavailable' | 'invalid'
 
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
+    const [selectedUserModel, setSelectedUserModel] = useState<string>('')
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
     const [copiedApiKey, setCopiedApiKey] = useState<string | null>(null)
-    const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
-    const [showCodeExample, setShowCodeExample] = useState<Record<string, boolean>>({})
+    const [showApiKey, setShowApiKey] = useState<boolean>(false)
+    const [pendingCopy, setPendingCopy] = useState<boolean>(false)
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
     const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
 
     const selectedModelCompany = getSelectedModelCompany()
     const debouncedModelName = useDebounce(modelName, 500)
+
+    const { data: userModels = [], isLoading: loadingUserModels } = useUserModelsByBaseModel(
+        selectedModel?.hf_id || ''
+    )
 
     const startFineTuneMutation = useStartFineTune()
     const {
@@ -166,31 +166,70 @@ function FineTune() {
         return { modelNameStatus: 'idle' as const, modelNameError: '' }
     }, [modelName, debouncedModelName, isCheckingModelName, modelNameCheck, modelNameCheckError])
 
-    const handleCopyUrl = (url: string, jobId: string) => {
+    const userModel = useMemo(() => {
+        return userModels.find(model => model.id === selectedUserModel)
+    }, [userModels, selectedUserModel])
+
+    const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
+        userModel?.apiKeyId,
+        showApiKey && !!userModel?.apiKeyId
+    )
+
+    useEffect(() => {
+        if (pendingCopy && apiKeyData?.keySecret && !isFetchingApiKey) {
+            navigator.clipboard.writeText(apiKeyData.keySecret)
+            setCopiedApiKey(userModel?.id || null)
+            setTimeout(() => setCopiedApiKey(null), 2000)
+            setPendingCopy(false)
+        }
+    }, [pendingCopy, apiKeyData, isFetchingApiKey, userModel?.id])
+
+    const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url)
-        setCopiedUrl(jobId)
+        setCopiedUrl(url)
         setTimeout(() => setCopiedUrl(null), 2000)
     }
 
-    const handleCopyApiKey = (apiKey: string, jobId: string) => {
-        navigator.clipboard.writeText(apiKey)
-        setCopiedApiKey(jobId)
-        setTimeout(() => setCopiedApiKey(null), 2000)
+    const handleCopyApiKey = async () => {
+        if (!userModel?.apiKeyId) {
+            return
+        }
+
+        if (apiKeyData?.keySecret) {
+            navigator.clipboard.writeText(apiKeyData.keySecret)
+            setCopiedApiKey(userModel.id)
+            setTimeout(() => setCopiedApiKey(null), 2000)
+        } else {
+            setPendingCopy(true)
+            setShowApiKey(true)
+        }
     }
 
-    const toggleApiKeyVisibility = (jobId: string) => {
-        setShowApiKey(prev => ({ ...prev, [jobId]: !prev[jobId] }))
-    }
-
-    const toggleCodeExample = (jobId: string) => {
-        setShowCodeExample(prev => ({ ...prev, [jobId]: !prev[jobId] }))
+    const toggleApiKeyVisibility = () => {
+        setShowApiKey(!showApiKey)
     }
 
     const maskApiKey = (apiKey: string) => {
         if (!apiKey) {
             return ''
         }
-        return `${apiKey.slice(0, 8)}${'•'.repeat(24)}${apiKey.slice(-4)}`
+        return `sk_${'•'.repeat(24)}`
+    }
+
+    const getApiKeyDisplay = () => {
+        if (!userModel?.apiKeyId) return ''
+
+        if (showApiKey) {
+            if (isFetchingApiKey) {
+                return 'Loading...'
+            }
+            if (apiKeyData?.keySecret) {
+                return apiKeyData.keySecret
+            }
+            return 'Failed to load'
+        }
+
+        return maskApiKey(userModel.apiKeyId)
     }
 
     const handleStartFineTune = () => {
@@ -210,7 +249,8 @@ function FineTune() {
 
         startFineTuneMutation.mutate(
             {
-                modelName,
+                modelName: selectedUserModel ? undefined : modelName,
+                modelId: selectedUserModel ? selectedUserModel : undefined,
                 baseModel: selectedModel.hf_id,
             },
             {
@@ -277,10 +317,10 @@ function FineTune() {
                             <div className="space-y-4">
                                 {/* Model Name */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Model Name</label>
+                                    <label className="text-sm font-medium">Create Model</label>
                                     <div className="relative">
                                         <Input
-                                            placeholder="e.g., customer-support-v1"
+                                            placeholder="Enter a unique model name e.g., customer-support-v1"
                                             value={modelName}
                                             onChange={(e) => setModelName(e.target.value.toLowerCase())}
                                             className={`shadow-none bg-blue-50 focus-visible:border-blue-200 border-none pr-10 ${modelNameStatus === 'invalid' || modelNameStatus === 'unavailable'
@@ -290,6 +330,7 @@ function FineTune() {
                                                     : ''
                                                 }`}
                                             maxLength={26}
+                                            disabled={!!selectedUserModel}
                                         />
                                         {/* Status Icon */}
                                         <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -314,6 +355,143 @@ function FineTune() {
                                         Lowercase letters, numbers, and hyphens only (max 26 characters)
                                     </p>
                                 </div>
+
+                                {/* Models Selector */}
+                                {userModels.length > 0 && (
+                                    <>
+                                        <div className='flex items-center w-full gap-2'>
+                                            <div className='flex-1 w-full h-[1px] bg-border' />
+                                            <div className='text-sm font-semibold'>OR</div>
+                                            <div className='flex-1 w-full h-[1px] bg-border' />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Select a Model</label>
+                                            <div className='flex gap-2 items-center'>
+                                                <Select value={selectedUserModel} onValueChange={setSelectedUserModel}>
+                                                    <SelectTrigger className="min-w-52 shadow-none border-none focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] relative bg-blue-50 focus-visible:border-blue-200 hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border-none">
+                                                        <SelectValue placeholder="Select your model" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="max-h-72 border-none">
+                                                        {userModels.map((model) => (
+                                                            <SelectItem key={model.id} value={model.id}>
+                                                                <span className="font-medium">{model.name}</span>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {
+                                                    selectedUserModel && (
+                                                        <Button
+                                                            variant="secondary"
+                                                            size='icon-sm'
+                                                            onClick={() => setSelectedUserModel('')}
+                                                        >
+                                                            <XIcon />
+                                                        </Button>
+                                                    )
+                                                }
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                Select one of your completed models to continue fine-tuning
+                                            </p>
+                                        </div>
+                                        {/* Model URL and API Key */}
+                                        {userModel?.inferenceUrl && (
+                                            <div className="space-y-4">
+                                                {/* API Endpoint */}
+                                                <div className="space-y-2">
+                                                    <p className="text-xs font-medium text-muted-foreground">
+                                                        API Endpoint
+                                                    </p>
+                                                    <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
+                                                        <code className="text-xs font-mono text-white flex-1 truncate">
+                                                            {userModel?.inferenceUrl}
+                                                        </code>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon-sm"
+                                                                    className="size-7 hover:bg-slate-700"
+                                                                    onClick={() => handleCopyUrl(userModel?.inferenceUrl || '')}
+                                                                >
+                                                                    {copiedUrl === userModel?.inferenceUrl ? (
+                                                                        <CheckCircle2 className="size-3 text-green-400" />
+                                                                    ) : (
+                                                                        <Copy className="size-3 text-slate-300" />
+                                                                    )}
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="bottom">
+                                                                {copiedUrl === userModel?.inferenceUrl ? 'Copied!' : 'Copy URL'}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </div>
+                                                </div>
+
+                                                {/* API Key */}
+                                                {userModel?.apiKeyId && (
+                                                    <div className="space-y-2">
+                                                        <p className="text-xs font-medium text-muted-foreground">
+                                                            API Key
+                                                        </p>
+                                                        <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
+                                                            <code className="text-xs font-mono text-white flex-1 truncate">
+                                                                {getApiKeyDisplay()}
+                                                            </code>
+                                                            <div className="flex gap-1">
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon-sm"
+                                                                            className="size-7 hover:bg-slate-700"
+                                                                            onClick={() => toggleApiKeyVisibility()}
+                                                                            disabled={isFetchingApiKey}
+                                                                        >
+                                                                            {showApiKey ? (
+                                                                                <EyeOff className="size-3 text-slate-300" />
+                                                                            ) : (
+                                                                                <Eye className="size-3 text-slate-300" />
+                                                                            )}
+                                                                        </Button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="bottom">
+                                                                        {showApiKey ? 'Hide' : 'Show'} API key
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon-sm"
+                                                                            className="size-7 hover:bg-slate-700"
+                                                                            onClick={() => handleCopyApiKey()}
+                                                                            disabled={isFetchingApiKey}
+                                                                        >
+                                                                            {copiedApiKey === userModel?.id ? (
+                                                                                <CheckCircle2 className="size-3 text-green-400" />
+                                                                            ) : (
+                                                                                <Copy className="size-3 text-slate-300" />
+                                                                            )}
+                                                                        </Button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="bottom">
+                                                                        {copiedApiKey === userModel?.id ? 'Copied!' : 'Copy API key'}
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <p className="text-xs text-muted-foreground">
+                                                    This model is compatible with any OpenAI SDK. Keep your API key secure.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
 
                                 {/* Start Button */}
                                 <div className="flex justify-end pt-2">
@@ -344,8 +522,8 @@ function FineTune() {
                         </div>
 
                         <div className="rounded-lg bg-background shadow-sm overflow-hidden">
-                            <div className="p-6 border-b">
-                                <div className="flex items-center gap-2">
+                            <div className="p-6 border-b flex items-center justify-between">
+                                <div className="flex gap-2">
                                     <h3 className="text-lg font-semibold">Your Fine-tune Jobs</h3>
                                 </div>
                             </div>
@@ -387,177 +565,6 @@ function FineTune() {
                                                         </div>
                                                     )}
 
-                                                    {/* Model URL and API Key for completed jobs */}
-                                                    {job.status === 'completed' && job.inferenceUrl && (
-                                                        <div className="space-y-4">
-                                                            {/* API Endpoint */}
-                                                            <div className="space-y-2">
-                                                                <p className="text-xs font-medium text-muted-foreground">
-                                                                    API Endpoint
-                                                                </p>
-                                                                <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
-                                                                    <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                        {job.inferenceUrl}
-                                                                    </code>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon-sm"
-                                                                                className="size-7 hover:bg-slate-700"
-                                                                                onClick={() => handleCopyUrl(job.inferenceUrl!, job.id)}
-                                                                            >
-                                                                                {copiedUrl === job.id ? (
-                                                                                    <CheckCircle2 className="size-3 text-green-400" />
-                                                                                ) : (
-                                                                                    <Copy className="size-3 text-slate-300" />
-                                                                                )}
-                                                                            </Button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="bottom">
-                                                                            {copiedUrl === job.id ? 'Copied!' : 'Copy URL'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* API Key */}
-                                                            {job.apiKeyId && (
-                                                                <div className="space-y-2">
-                                                                    <p className="text-xs font-medium text-muted-foreground">
-                                                                        API Key
-                                                                    </p>
-                                                                    <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
-                                                                        <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                            {showApiKey[job.id] ? job.apiKeyId : maskApiKey(job.apiKeyId)}
-                                                                        </code>
-                                                                        <div className="flex gap-1">
-                                                                            <Tooltip>
-                                                                                <TooltipTrigger asChild>
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="icon-sm"
-                                                                                        className="size-7 hover:bg-slate-700"
-                                                                                        onClick={() => toggleApiKeyVisibility(job.id)}
-                                                                                    >
-                                                                                        {showApiKey[job.id] ? (
-                                                                                            <EyeOff className="size-3 text-slate-300" />
-                                                                                        ) : (
-                                                                                            <Eye className="size-3 text-slate-300" />
-                                                                                        )}
-                                                                                    </Button>
-                                                                                </TooltipTrigger>
-                                                                                <TooltipContent side="bottom">
-                                                                                    {showApiKey[job.id] ? 'Hide' : 'Show'} API key
-                                                                                </TooltipContent>
-                                                                            </Tooltip>
-                                                                            <Tooltip>
-                                                                                <TooltipTrigger asChild>
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="icon-sm"
-                                                                                        className="size-7 hover:bg-slate-700"
-                                                                                        onClick={() => handleCopyApiKey(job.apiKeyId!, job.id)}
-                                                                                    >
-                                                                                        {copiedApiKey === job.id ? (
-                                                                                            <CheckCircle2 className="size-3 text-green-400" />
-                                                                                        ) : (
-                                                                                            <Copy className="size-3 text-slate-300" />
-                                                                                        )}
-                                                                                    </Button>
-                                                                                </TooltipTrigger>
-                                                                                <TooltipContent side="bottom">
-                                                                                    {copiedApiKey === job.id ? 'Copied!' : 'Copy API key'}
-                                                                                </TooltipContent>
-                                                                            </Tooltip>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Usage Example */}
-                                                            <div className="space-y-2">
-                                                                <div className="flex items-center justify-between">
-                                                                    <p className="text-xs font-medium text-muted-foreground">
-                                                                        OpenAI SDK Usage Example
-                                                                    </p>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="sm"
-                                                                        className="h-6 px-2 text-xs"
-                                                                        onClick={() => toggleCodeExample(job.id)}
-                                                                    >
-                                                                        <Code2 className="size-3 mr-1" />
-                                                                        {showCodeExample[job.id] ? 'Hide' : 'Show'} Example
-                                                                    </Button>
-                                                                </div>
-
-                                                                {showCodeExample[job.id] && (
-                                                                    <div className="relative">
-                                                                        <pre className="p-4 bg-slate-900 border border-slate-700 rounded-md overflow-x-auto text-xs">
-                                                                            <code className="text-slate-200 font-mono">{`from openai import OpenAI
-
-# Initialize the client with your fine-tuned model
-client = OpenAI(
-    base_url="${job.inferenceUrl}",
-    api_key="${job.apiKeyId ? maskApiKey(job.apiKeyId) : 'your-api-key'}"
-)
-
-# Make a request to your fine-tuned model
-response = client.chat.completions.create(
-    model="${job.id}",
-    messages=[
-        {"role": "user", "content": "Hello!"}
-    ]
-)
-
-print(response.choices[0].message.content)`}</code>
-                                                                        </pre>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon-sm"
-                                                                                    className="absolute top-2 right-2 size-7 hover:bg-slate-700"
-                                                                                    onClick={() => {
-                                                                                        const code = `from openai import OpenAI
-
-# Initialize the client with your fine-tuned model
-client = OpenAI(
-    base_url="${job.inferenceUrl}",
-    api_key="${job.apiKeyId || 'your-api-key'}"
-)
-
-# Make a request to your fine-tuned model
-response = client.chat.completions.create(
-    model="${job.id}",
-    messages=[
-        {"role": "user", "content": "Hello!"}
-    ]
-)
-
-print(response.choices[0].message.content)`
-                                                                                        navigator.clipboard.writeText(code)
-                                                                                    }}
-                                                                                >
-                                                                                    <Copy className="size-3 text-slate-300" />
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent side="bottom">
-                                                                                Copy code
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-
-                                                            <p className="text-xs text-muted-foreground">
-                                                                This model is compatible with any OpenAI SDK. Keep your API key secure.
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Timestamps */}
                                                     <div className="flex gap-4 text-xs text-muted-foreground">
                                                         <span>Started: {job.createdAt}</span>
                                                         {job.completedAt && (

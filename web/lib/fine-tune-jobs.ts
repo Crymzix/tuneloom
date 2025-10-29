@@ -40,8 +40,6 @@ export interface FineTuneJob {
     completedAt?: Date;
     failedAt?: Date;
     error?: string;
-    apiKeyId?: string;
-    inferenceUrl?: string;
     cloudRunJobName?: string;
 }
 
@@ -77,7 +75,6 @@ function docToJob(doc: any): FineTuneJob {
         completedAt: data.completedAt ? convertTimestamp(data.completedAt) : undefined,
         failedAt: data.failedAt ? convertTimestamp(data.failedAt) : undefined,
         error: data.error,
-        inferenceUrl: data.inferenceUrl,
         cloudRunJobName: data.cloudRunJobName,
     };
 }
@@ -213,4 +210,138 @@ export function subscribeToJob(
             }
         }
     );
+}
+
+/**
+ * User model interface matching Model document in Firestore
+ */
+export interface UserModel {
+    id: string;
+    userId: string;
+    name: string;
+    baseModel: string;
+    status: 'active' | 'archived';
+    createdAt: Date;
+    updatedAt: Date;
+    metadata?: {
+        description?: string;
+        tags?: string[];
+    };
+    apiKeyId?: string;
+    inferenceUrl?: string;
+}
+
+/**
+ * Convert Firestore document to UserModel
+ */
+function docToUserModel(doc: any): UserModel {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        userId: data.userId,
+        name: data.name,
+        baseModel: data.baseModel,
+        status: data.status,
+        createdAt: convertTimestamp(data.createdAt),
+        updatedAt: convertTimestamp(data.updatedAt),
+        metadata: data.metadata,
+        apiKeyId: data.apiKeyId,
+        inferenceUrl: data.inferenceUrl,
+    };
+}
+
+/**
+ * Subscribe to real-time updates for a user's models filtered by baseModel
+ *
+ * @param userId - The authenticated user's ID
+ * @param baseModel - The base model to filter by
+ * @param onUpdate - Callback function called when models are updated
+ * @param onError - Optional error handler
+ * @returns Unsubscribe function to stop listening
+ *
+ * @note This query requires a composite index in Firestore:
+ * Collection: models
+ * Fields: userId (Ascending), baseModel (Ascending), status (Ascending), createdAt (Descending)
+ *
+ * @example
+ * ```tsx
+ * const { user } = useAuth();
+ * const { selectedModel } = useModelStore();
+ *
+ * useEffect(() => {
+ *   if (!user || !selectedModel) return;
+ *
+ *   const unsubscribe = subscribeToUserModelsByBaseModel(
+ *     user.uid,
+ *     selectedModel.hf_id,
+ *     (models) => {
+ *       setModels(models);
+ *     }
+ *   );
+ *
+ *   return () => unsubscribe();
+ * }, [user, selectedModel]);
+ * ```
+ */
+export function subscribeToUserModelsByBaseModel(
+    userId: string,
+    baseModel: string,
+    onUpdate: (models: UserModel[]) => void,
+    onError?: (error: Error) => void
+): Unsubscribe {
+    const modelsRef = collection(firestore, 'models');
+    const q = query(
+        modelsRef,
+        where('userId', '==', userId),
+        where('baseModel', '==', baseModel),
+        where('status', '==', 'active'),
+        orderBy('createdAt', 'desc')
+    );
+
+    return onSnapshot(
+        q,
+        (snapshot) => {
+            const models = snapshot.docs.map(docToUserModel);
+            onUpdate(models);
+        },
+        (error) => {
+            console.error('Error subscribing to user models by baseModel:', error);
+            if (onError) {
+                onError(error);
+            }
+        }
+    );
+}
+
+/**
+ * Get user's active models filtered by baseModel (one-time fetch)
+ *
+ * @param userId - The authenticated user's ID
+ * @param baseModel - The base model to filter by
+ * @returns Array of active user models
+ *
+ * @note This query requires a composite index in Firestore:
+ * Collection: models
+ * Fields: userId (Ascending), baseModel (Ascending), status (Ascending), createdAt (Descending)
+ *
+ * @example
+ * ```tsx
+ * const models = await getUserModelsByBaseModel(user.uid, 'meta-llama/Llama-3.2-3B-Instruct');
+ * ```
+ */
+export async function getUserModelsByBaseModel(
+    userId: string,
+    baseModel: string
+): Promise<UserModel[]> {
+    const modelsRef = collection(firestore, 'models');
+    const q = query(
+        modelsRef,
+        where('userId', '==', userId),
+        where('baseModel', '==', baseModel),
+        where('status', '==', 'active'),
+        orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(docToUserModel);
 }

@@ -1,8 +1,9 @@
 import { FatalError } from "workflow";
 import { getAdminFirestore } from "../../../lib/firebase-admin";
 import { getJobsClient } from "../config/providers";
-import { FineTuneJob, FineTuneJobConfig, ModelApiKey } from "../types";
-import crypto from 'crypto'
+import { FineTuneJob, FineTuneJobConfig, Model, ModelApiKey } from "../types";
+import crypto from 'crypto';
+import { encrypt } from "../utils/encryption";
 
 /**
  * Parameters for queuing a fine-tune job
@@ -149,25 +150,34 @@ async function generateApiKeyForModel(jobId: string, modelName: string, modelId:
     const keyId = `ak_${crypto.randomBytes(16).toString('base64url')}`;
     const keyHash = crypto.createHash('sha256').update(keySecret).digest('hex');
 
-    await firestore
-        .collection('api-keys')
-        .doc(keyId)
-        .set({
-            keyHash,
-            userId,
-            modelId,
-            modelName,
-            createdAt: new Date(),
-            lastUsedAt: null,
-            expiresAt: null,
-            isActive: true,
-            type: 'fine-tuned',
-        } as ModelApiKey)
+    // Encrypt the key secret for storage
+    const keySecretEncrypted = encrypt(keySecret);
 
-    await firestore.collection('fine-tune-jobs').doc(jobId).update({
-        apiKeyId: keyId,
-        inferenceUrl: `${process.env.OPENAI_COMPATIBLE_BASE_URL}/${modelName}`
-    });
+    await Promise.all([
+        firestore
+            .collection('api-keys')
+            .doc(keyId)
+            .set({
+                keyId,
+                keyHash,
+                keySecretEncrypted,
+                userId,
+                modelId,
+                modelName,
+                createdAt: new Date(),
+                lastUsedAt: null,
+                expiresAt: null,
+                isActive: true,
+                type: 'fine-tuned',
+            } as ModelApiKey),
+        firestore
+            .collection('models')
+            .doc(modelId)
+            .update({
+                apiKeyId: keyId,
+                inferenceUrl: `${process.env.OPENAI_COMPATIBLE_BASE_URL}/${modelName}`
+            } as Partial<Model>),
+    ])
 
     return { keyId, keySecret }
 }

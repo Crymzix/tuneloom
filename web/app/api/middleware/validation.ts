@@ -45,9 +45,15 @@ export const schemas = {
         ),
 
     startFineTuneRequest: z.object({
-        modelName: z.string().min(1, 'Model name is required'),
+        modelId: z.string().optional(),
+        modelName: z.string().optional(),
         baseModel: z.string().min(1, 'Base model is required'),
-    }),
+    }).refine(
+        (data) => !!(data.modelId) !== !!(data.modelName),
+        {
+            message: 'Either modelId or modelName must be provided, but not both',
+        }
+    ),
 
     checkModelNameQuery: z.object({
         name: z.string()

@@ -64,6 +64,17 @@ app.post(
 );
 
 /**
+ * Get API key endpoint
+ * GET /api/fine-tune/api-key/:keyId
+ * Retrieve the decrypted API key for a model
+ */
+app.get(
+    '/fine-tune/api-key/:keyId',
+    authMiddleware,
+    FineTuneController.getApiKey
+);
+
+/**
  * Model name availability check endpoint
  * GET /api/check-model-name?name=<modelName>
  * Check if a model name is available for use

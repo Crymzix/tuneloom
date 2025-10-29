@@ -33,6 +33,31 @@ service cloud.firestore {
         && isOwner(resource.data.userId);
     }
 
+    match /models/{modelId} {
+      // Allow read if:
+      // 1. User is authenticated and not anonymous
+      // 2. The userId in the document matches the authenticated user's UID
+      //
+      // This allows queries like:
+      // - where('userId', '==', userId)
+      // - where('userId', '==', userId).where('baseModel', '==', baseModel)
+      // - where('userId', '==', userId).where('baseModel', '==', baseModel).where('status', '==', 'active')
+      allow read: if isAuthenticatedUser()
+        && isOwner(resource.data.userId);
+
+      // Allow create only via server-side (API)
+      // Client-side cannot create models directly
+      allow create: if false;
+
+      // Allow update only via server-side (API)
+      // Client-side cannot update models directly
+      allow update: if false;
+
+      // Allow delete only if user owns the model
+      allow delete: if isAuthenticatedUser()
+        && isOwner(resource.data.userId);
+    }
+
     // Deny all other access by default
     match /{document=**} {
       allow read, write: if false;

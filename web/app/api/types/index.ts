@@ -95,7 +95,6 @@ export interface FineTuneJob {
     completedAt?: Date;
     failedAt?: Date;
     error?: string;
-    modelUrl?: string;
     cloudRunJobName?: string;
 }
 
@@ -111,6 +110,8 @@ export interface Model {
     status: 'active' | 'archived';
     createdAt: Date;
     updatedAt: Date;
+    apiKeyId?: string;
+    inferenceUrl?: string;
     metadata?: {
         description?: string;
         tags?: string[];
@@ -124,6 +125,7 @@ export interface Model {
 export interface ModelApiKey {
     keyId: string;
     keyHash: string;
+    keySecretEncrypted: string; // Encrypted version of the actual API key for display
     userId: string;
     modelId: string;
     modelName: string;
@@ -142,7 +144,8 @@ export interface ModelApiKey {
  * Request body for starting a fine-tune job
  */
 export interface StartFineTuneRequest {
-    modelName: string;
+    modelName?: string;
+    modelId?: string;
     baseModel: string;
 }
 

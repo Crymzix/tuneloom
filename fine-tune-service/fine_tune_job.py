@@ -121,8 +121,8 @@ class FineTuneJob:
             )
             self.job_tracker.mark_completed(
                 metadata={
-                    "output_path": output_uri,
-                    "model_name": self.config.job.output_model_name,
+                    "outputPath": output_uri,
+                    "modelName": self.config.job.output_model_name,
                 }
             )
 

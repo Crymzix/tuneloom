@@ -30,10 +30,17 @@ function initializeFirebaseAdmin() {
 
         adminAuth = getAuth(adminApp);
         adminFirestore = getFirestore(adminApp);
+        adminFirestore.settings({ ignoreUndefinedProperties: true });
     } else {
         adminApp = getApps()[0];
         adminAuth = getAuth(adminApp);
         adminFirestore = getFirestore(adminApp);
+
+        try {
+            adminFirestore.settings({ ignoreUndefinedProperties: true });
+        } catch (error) {
+            // Settings already configured, safe to ignore
+        }
     }
 
     return { adminApp, adminAuth, adminFirestore };

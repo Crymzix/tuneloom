@@ -1,7 +1,7 @@
-# Dockerfile for Fine-Tuning Gemma on Cloud Run with L4 GPU
+# Dockerfile for Inference Service on Cloud Run with L4 GPU
 # Optimized for NVIDIA L4 GPU with CUDA 12.1
 
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     curl \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Create symbolic links for python
@@ -38,35 +37,33 @@ RUN pip install --no-cache-dir \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code into a package directory
-RUN mkdir -p fine_tune_service
-COPY __init__.py fine_tune_service/
-COPY __main__.py fine_tune_service/
-COPY config.py fine_tune_service/
-COPY storage.py fine_tune_service/
-COPY job_tracker.py fine_tune_service/
-COPY model_manager.py fine_tune_service/
-COPY data_manager.py fine_tune_service/
-COPY trainer.py fine_tune_service/
-COPY fine_tune_job.py fine_tune_service/
+# Copy application code
+COPY inference-server.py .
+COPY src/ ./src/
 
 # Set environment variables for optimal GPU performance
 ENV CUDA_VISIBLE_DEVICES=0
 ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 ENV TOKENIZERS_PARALLELISM=false
 
-# Create cache directory
-RUN mkdir -p /tmp/finetune
-
 # Set HuggingFace cache to local directory
-ENV HF_HOME=/tmp/finetune/hf_cache
-ENV TRANSFORMERS_CACHE=/tmp/finetune/hf_cache
-ENV HF_DATASETS_CACHE=/tmp/finetune/hf_cache
+ENV HF_HOME=/tmp/hf_cache
+ENV TRANSFORMERS_CACHE=/tmp/hf_cache
+ENV HF_DATASETS_CACHE=/tmp/hf_cache
+
+# Create cache directories
+RUN mkdir -p /tmp/hf_cache /tmp/model_cache
+
+# Set model cache directory
+ENV MODEL_CACHE_DIR=/tmp/model_cache
 
 # Run as non-root user for security (Cloud Run requirement)
 RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app /tmp/finetune
+    chown -R appuser:appuser /app /tmp
 USER appuser
 
-# Entry point - run as a package module
-ENTRYPOINT ["python", "-m", "fine_tune_service"]
+# Expose port
+EXPOSE 8080
+
+# Entry point - run the inference server
+ENTRYPOINT ["python", "inference-server.py"]

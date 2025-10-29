@@ -113,12 +113,18 @@ gcloud auth configure-docker ${REGION}-docker.pkg.dev
 echo -e "${GREEN}Step 4: Building and pushing Docker image...${NC}"
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest"
 
-echo "  Building image..."
-docker build -t ${IMAGE_URI} .
+# Option 1: Use Cloud Build (recommended - builds in cloud, always correct platform)
+# This is faster and avoids platform issues entirely
+echo "  Building image with Cloud Build (this may take several minutes)..."
+gcloud builds submit \
+    --tag ${IMAGE_URI} \
+    --timeout=20m
 
-echo "  Pushing to Artifact Registry..."
-docker push ${IMAGE_URI}
-echo "  ✓ Image pushed"
+# Option 2: Build locally with buildx (uncomment if you prefer local builds)
+# echo "  Building image locally (this may take several minutes)..."
+# docker buildx build --platform linux/amd64 -t ${IMAGE_URI} . --push
+
+echo "  ✓ Image built and pushed"
 
 # ============================================================================
 # Step 5: Deploy to Cloud Run

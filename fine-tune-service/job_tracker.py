@@ -67,7 +67,7 @@ class FirestoreJobTracker:
             job_ref = self.db.collection(self.COLLECTION_NAME).document(self.job_id)
             update_data = {
                 "status": status,
-                "updated_at": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
             }
 
             if message:
@@ -81,6 +81,8 @@ class FirestoreJobTracker:
                 update_data["error"] = error
             if metadata:
                 update_data["metadata"] = metadata
+            if status == "completed":
+                update_data["completedAt"] = firestore.SERVER_TIMESTAMP
 
             job_ref.update(update_data)
             log_message = f"Updated job status: {status}"
