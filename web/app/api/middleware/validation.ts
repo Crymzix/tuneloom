@@ -7,10 +7,7 @@ import { MODEL_IDS } from '../config/constants';
  */
 export const schemas = {
     chatRequest: z.object({
-        modelId: z.string().min(1, 'Model ID is required').refine(
-            (id) => Object.values(MODEL_IDS).includes(id as any),
-            'Invalid model ID. Must be one of the supported models.'
-        ),
+        modelId: z.string().min(1, 'Model ID is required'),
         messages: z.array(
             z.object({
                 role: z.enum(['user', 'assistant', 'system']),
@@ -24,7 +21,8 @@ export const schemas = {
                 id: z.string().optional(),
             })
         ).min(1, 'At least one message is required'),
-    }).loose(), // Allow extra fields like 'trigger' and 'id'
+        apiKey: z.string().optional(),
+    }).loose(), // Allow extra fields
 
     trainingDataRequest: z.object({
         prompt: z.string().min(10, 'Prompt must be at least 10 characters long')

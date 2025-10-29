@@ -2,26 +2,25 @@
 
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
-import { modelGroups } from "../../lib/models"
-import { ArrowDownIcon, BrainIcon, Loader2Icon, SendIcon, User2Icon, XCircleIcon } from "lucide-react"
+import { ArrowDownIcon, Loader2Icon, SendIcon, User2Icon, XCircleIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from "../ui/select"
-import { Badge } from "../ui/badge"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { useChat } from '@ai-sdk/react';
 import { motion, AnimatePresence } from "motion/react";
 import { ScrollArea } from "../ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
 import { ShimmeringText } from "../ui/shadcn-io/shimmering-text"
 import { interFont } from "../../lib/utils"
-import { BorderBeam } from "../ui/border-beam"
 import { useModelStore } from "../../lib/store/model-store"
 import { useAuth } from "../../contexts/auth-context"
+import { ModelSelector } from "../model-selector"
+import { useGetApiKey } from "../../hooks/use-fine-tune"
+import { UserModel } from "../../lib/fine-tune-jobs"
 
 function ChatInput() {
     const { user } = useAuth()
     const [chatInput, setChatInput] = useState("")
-    const { selectedModel, setSelectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
+    const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
+    const [selectedUserModel, setSelectedUserModel] = useState<UserModel | null>(null);
     const { messages, setMessages, sendMessage, status, error } = useChat();
     const isLoading = status === 'streaming' || status === 'submitted';
 
@@ -31,18 +30,37 @@ function ChatInput() {
 
     const selectedModelCompany = getSelectedModelCompany()
 
+    const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
+        selectedUserModel?.apiKeyId,
+        !!selectedUserModel?.apiKeyId
+    )
+
     const handleSendMessage = async () => {
         const token = await user?.getIdToken();
-        sendMessage({
-            text: chatInput,
-        }, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-            body: {
-                modelId: selectedModel.hf_id,
-            }
-        });
+        if (selectedUserModel) {
+            sendMessage({
+                text: chatInput,
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: {
+                    modelId: selectedUserModel.name,
+                    apiKey: apiKeyData?.keySecret || '',
+                }
+            });
+        } else {
+            sendMessage({
+                text: chatInput,
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: {
+                    modelId: selectedModel.hf_id,
+                }
+            });
+        }
         setChatInput('');
     }
 
@@ -69,7 +87,6 @@ function ChatInput() {
 
     useEffect(() => {
         if (isAtBottom && messages.length > 0) {
-            // Use setTimeout to ensure DOM has updated
             setTimeout(() => {
                 scrollToBottom();
             }, 100);
@@ -94,7 +111,7 @@ function ChatInput() {
                 </div>
             </div>
 
-            {/* Messages container - only visible when there are messages */}
+            {/* Messages container */}
             <AnimatePresence>
                 {hasMessages && (
                     <motion.div
@@ -208,7 +225,6 @@ function ChatInput() {
             </AnimatePresence>
             <div className="absolute bottom-0 left-0 -z-10 right-0 h-32 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
 
-            {/* Input container - centered when no messages, at bottom when messages exist */}
             <motion.div
                 className="absolute left-1/2 w-full flex items-center justify-center px-4 z-10"
                 initial={false}
@@ -235,75 +251,24 @@ function ChatInput() {
                         }}
                     />
                     <div className="px-3 py-2 flex items-center gap-2">
-                        <Select
-                            value={selectedModel.hf_id}
-                            onValueChange={(value) => {
-                                const model = modelGroups.flatMap(m => m.models).find(m => m.hf_id === value)
-                                if (model) {
-                                    if (model.hf_id !== selectedModel.hf_id) {
-                                        setMessages([])
-                                    }
-                                    setSelectedModel(model)
-                                }
+                        <ModelSelector
+                            onBaseModelChange={() => {
+                                setMessages([])
                             }}
-                        >
-                            {
-                                _hasHydrated && (
-                                    <SelectTrigger
-                                        className="focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] relative bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border-none"
-                                    >
-                                        <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-4 mr-2 object-contain" />
-                                        {selectedModel.name}
-                                        <BorderBeam duration={8} colorFrom="#60a5fa" colorTo="#dbeafe" size={60} borderWidth={2} />
-                                    </SelectTrigger>
-                                )
-                            }
-                            <SelectContent className="w-56 max-h-72 border-none">
-                                {
-                                    modelGroups.map((group) => {
-                                        return (
-                                            <SelectGroup key={group.company_name}>
-                                                <SelectLabel className="text-xs">
-                                                    <img src={group.company_logo} alt={group.company_name} className="inline-block size-4 mr-2 object-contain" />
-                                                    {group.company_name}
-                                                </SelectLabel>
-                                                {
-                                                    group.models.map((m) => {
-                                                        return (
-                                                            <SelectItem
-                                                                key={m.hf_id}
-                                                                value={m.hf_id}
-                                                            >
-                                                                {m.name}
-                                                            </SelectItem>
-                                                        )
-                                                    })
-                                                }
-                                            </SelectGroup>
-                                        )
-                                    })
-                                }
-                            </SelectContent>
-                        </Select>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Badge className="size-8 bg-blue-300">
-                                    <BrainIcon className="!size-4" />
-                                </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                                <p>Base Model</p>
-                            </TooltipContent>
-                        </Tooltip>
+                            onModelChange={(value) => {
+                                setMessages([])
+                                setSelectedUserModel(value)
+                            }}
+                        />
                         <Button
                             variant="outline"
                             size="sm"
                             className="border-none h-9 flex items-center justify-center ml-auto"
-                            disabled={chatInput.trim() === "" || isLoading}
+                            disabled={chatInput.trim() === "" || isLoading || isFetchingApiKey}
                             onClick={handleSendMessage}
                         >
                             {
-                                isLoading ?
+                                isLoading || isFetchingApiKey ?
                                     <Loader2Icon className="animate-spin" /> :
                                     <SendIcon />
                             }

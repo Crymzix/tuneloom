@@ -198,7 +198,7 @@ class AuthMiddleware:
             requested_model = self._extract_model_from_path(request.url.path)
 
             # Validate model access
-            allowed_model = key_data.get("modelId")
+            allowed_model = key_data.get("modelName")
 
             # If a specific model is in the path, verify access
             if requested_model and allowed_model != "*":

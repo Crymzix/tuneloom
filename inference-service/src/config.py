@@ -19,6 +19,10 @@ class Config:
     GCS_BUCKET = os.getenv("GCS_BUCKET", "your-models-bucket")
     GCS_MODEL_PREFIX = os.getenv("GCS_MODEL_PREFIX", "models/")
 
+    # Cloud Storage FUSE mount path (if volume is mounted via Cloud Console)
+    # If set, models will be read directly from mounted volume instead of downloading
+    MOUNT_PATH = os.getenv("MOUNT_PATH", None)
+
     # Model Cache Configuration
     LOCAL_MODEL_CACHE = os.getenv("LOCAL_MODEL_CACHE", "/tmp/model_cache")
     MAX_CACHED_MODELS = int(os.getenv("MAX_CACHED_MODELS", "2"))  # Cloud Run: keep small
@@ -45,7 +49,12 @@ class Config:
         TORCH_DTYPE = torch.float32  # MPS has numerical issues with fp16, use fp32
     elif torch.cuda.is_available():
         DEVICE = "cuda"
-        TORCH_DTYPE = torch.float16
+        # Use bfloat16 for better numerical stability than float16
+        # bfloat16 has same memory footprint but wider exponent range (like fp32)
+        if torch.cuda.is_bf16_supported():
+            TORCH_DTYPE = torch.bfloat16
+        else:
+            TORCH_DTYPE = torch.float32
     else:
         DEVICE = "cpu"
         TORCH_DTYPE = torch.float32

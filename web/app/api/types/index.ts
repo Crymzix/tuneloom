@@ -6,6 +6,7 @@ import { UIMessage } from 'ai';
 export interface ChatRequest {
     modelId: string;
     messages: UIMessage[];
+    apiKey?: string;
 }
 
 /**

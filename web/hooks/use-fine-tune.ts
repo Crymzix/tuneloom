@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import {
     subscribeToUserJobs,
     subscribeToUserModelsByBaseModel,
+    getUserModelsByBaseModel,
     FineTuneJob as FirestoreFineTuneJob,
     UserModel
 } from '@/lib/fine-tune-jobs'
@@ -172,6 +173,28 @@ export function useUserModelsByBaseModel(baseModel: string) {
         ...query,
         isLoading: query.isLoading || !hasReceivedFirstUpdate,
     }
+}
+
+/**
+ * Hook to fetch user's models filtered by baseModel (one-time fetch)
+ * Alternative to useUserModelsByBaseModel that fetches data once instead of using real-time updates
+ */
+export function useUserModelsByBaseModelOnce(baseModel: string) {
+    const { user } = useAuth()
+
+    return useQuery({
+        queryKey: ['user-models-by-base-once', user?.uid, baseModel],
+        queryFn: async () => {
+            if (!user || user.isAnonymous || !baseModel) {
+                return [] as UserModel[]
+            }
+
+            return getUserModelsByBaseModel(user.uid, baseModel)
+        },
+        enabled: !!user && !user.isAnonymous && !!baseModel,
+        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+        retry: 1,
+    })
 }
 
 /**

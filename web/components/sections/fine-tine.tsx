@@ -29,6 +29,7 @@ import { ScrollArea } from '../ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { useCheckModelName, useStartFineTune, useUserJobs, useUserModelsByBaseModel, useGetApiKey } from '../../hooks/use-fine-tune'
 import { useDebounce } from '../../hooks/use-debounce'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 
 type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
 
@@ -71,6 +72,15 @@ function FineTune() {
 
     const { data: userModels = [], isLoading: loadingUserModels } = useUserModelsByBaseModel(
         selectedModel?.hf_id || ''
+    )
+
+    const userModel = useMemo(() => {
+        return userModels.find(model => model.id === selectedUserModel)
+    }, [userModels, selectedUserModel])
+
+    const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
+        userModel?.apiKeyId,
+        showApiKey && !!userModel?.apiKeyId
     )
 
     const startFineTuneMutation = useStartFineTune()
@@ -165,15 +175,6 @@ function FineTune() {
 
         return { modelNameStatus: 'idle' as const, modelNameError: '' }
     }, [modelName, debouncedModelName, isCheckingModelName, modelNameCheck, modelNameCheckError])
-
-    const userModel = useMemo(() => {
-        return userModels.find(model => model.id === selectedUserModel)
-    }, [userModels, selectedUserModel])
-
-    const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
-        userModel?.apiKeyId,
-        showApiKey && !!userModel?.apiKeyId
-    )
 
     useEffect(() => {
         if (pendingCopy && apiKeyData?.keySecret && !isFetchingApiKey) {
@@ -359,7 +360,7 @@ function FineTune() {
                                 {/* Models Selector */}
                                 {userModels.length > 0 && (
                                     <>
-                                        <div className='flex items-center w-full gap-2'>
+                                        <div className='flex items-center w-full gap-6'>
                                             <div className='flex-1 w-full h-[1px] bg-border' />
                                             <div className='text-sm font-semibold'>OR</div>
                                             <div className='flex-1 w-full h-[1px] bg-border' />
@@ -495,28 +496,41 @@ function FineTune() {
 
                                 {/* Start Button */}
                                 <div className="flex justify-end pt-2">
-                                    <Button
-                                        size="sm"
-                                        className='bg-green-500 text-white hover:bg-green-400 border-none'
-                                        onClick={handleStartFineTune}
-                                        disabled={modelNameStatus !== 'available' || !modelName || isStarting}
-                                    >
-                                        {isStarting ? (
-                                            <>
-                                                <Loader2 className="size-4 animate-spin" />
-                                                {
-                                                    hasRunningJobs ? 'Fine-tune in progress...' : (
-                                                        hasQueuedJobs ? 'Job queued...' : 'Starting...'
-                                                    )
-                                                }
-                                            </>
-                                        ) : (
-                                            <>
+                                    {
+                                        isStarting ?
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        size="sm"
+                                                        className='bg-green-500 text-white hover:bg-green-400 border-none'
+                                                    >
+                                                        <Loader2 className="size-4 animate-spin" />
+                                                        {
+                                                            hasRunningJobs ? 'Fine-tune in progress...' : (
+                                                                hasQueuedJobs ? 'Job queued...' : 'Starting...'
+                                                            )
+                                                        }
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className='border-none' align='end'>
+                                                    <div className="max-w-xs">
+                                                        <h4 className="font-semibold mb-2 text-sm">Fine-tuning in progress</h4>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            You have an ongoing fine-tuning job. Please wait for it to complete before starting a new one. This can take a while depending on the size of your dataset and the model.
+                                                        </p>
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover> :
+                                            <Button
+                                                size="sm"
+                                                className='bg-green-500 text-white hover:bg-green-400 border-none'
+                                                onClick={handleStartFineTune}
+                                                disabled={modelNameStatus !== 'available' || !modelName || isStarting}
+                                            >
                                                 <Play className="size-4" />
                                                 Start Fine-tuning
-                                            </>
-                                        )}
-                                    </Button>
+                                            </Button>
+                                    }
                                 </div>
                             </div>
                         </div>

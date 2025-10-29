@@ -7,10 +7,22 @@ import { JobsClient } from '@google-cloud/run';
  * Connects to OpenAI-compatible inference service
  */
 export const customProvider = createOpenAICompatible({
-    name: 'modelsmith',
+    name: 'tuneloom',
     baseURL: process.env.OPENAI_COMPATIBLE_BASE_URL || 'http://localhost:8880/v1',
     apiKey: process.env.BASE_MODEL_API_KEY || '',
 });
+
+/**
+ * Create a custom provider with dynamic baseURL
+ */
+export function createCustomProvider(modelId: string, apiKey: string) {
+    const baseURL = `${process.env.OPENAI_COMPATIBLE_BASE_URL}/${modelId}`
+    return createOpenAICompatible({
+        name: 'tuneloom',
+        baseURL,
+        apiKey
+    });
+}
 
 /**
  * Google provider instance for Gemini models

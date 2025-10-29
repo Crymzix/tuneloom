@@ -152,7 +152,19 @@ gcloud run jobs ${ACTION} ${JOB_NAME} \
     --no-gpu-zonal-redundancy \
     --memory=${MEMORY} \
     --cpu=${CPU} \
-    --set-env-vars="CLEANUP_CACHE=true"
+    --set-env-vars="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs"
+
+# Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
+# environment variable to enable direct file access and writes:
+#   --set-env-vars="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs"
+#
+# This will:
+# - Read training data and base models directly from mounted volume (no download)
+# - Write fine-tuned models directly to mounted volume (no upload wait time)
+# - Significantly reduce job execution time
+#
+# Configure volume mounts in Cloud Console:
+# https://docs.cloud.google.com/run/docs/configuring/services/cloud-storage-volume-mounts
 
 echo "  ✓ Job ${ACTION}d successfully"
 

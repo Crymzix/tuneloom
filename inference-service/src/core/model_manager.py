@@ -29,7 +29,12 @@ class ModelManager:
         self.loading_locks: Dict[str, asyncio.Lock] = {}
         self._ensure_cache_dir()
 
-        # Initialize GCS client
+        # Log if using mounted volume
+        if config.MOUNT_PATH:
+            logger.info(f"Cloud Storage volume mounted at: {config.MOUNT_PATH}")
+            logger.info("Models will be read directly from mounted volume when available")
+
+        # Initialize GCS client (used for fallback when MOUNT_PATH not set or model not found)
         try:
             from google.cloud import storage
 
@@ -37,8 +42,14 @@ class ModelManager:
             self.bucket = self.gcs_client.bucket(config.GCS_BUCKET)
             logger.info(f"Connected to GCS bucket: {config.GCS_BUCKET}")
         except Exception as e:
-            logger.error(f"GCS client initialization failed: {e}")
-            raise RuntimeError(f"Cannot initialize GCS client: {e}")
+            # Only raise error if MOUNT_PATH is not configured (no fallback available)
+            if not config.MOUNT_PATH:
+                logger.error(f"GCS client initialization failed and no MOUNT_PATH configured: {e}")
+                raise RuntimeError(f"Cannot initialize GCS client: {e}")
+            else:
+                logger.warning(f"GCS client initialization failed, relying on mounted volume: {e}")
+                self.gcs_client = None
+                self.bucket = None
 
     def _ensure_cache_dir(self) -> None:
         """Create cache directory if it doesn't exist."""
@@ -71,19 +82,80 @@ class ModelManager:
         formatted_model_id = model_id.replace("/", "-")
         return f"{config.GCS_MODEL_PREFIX}{formatted_model_id}"
 
-    async def _download_from_gcs(self, model_id: str) -> str:
+    def _get_mounted_model_path(self, model_id: str) -> str | None:
         """
-        Download model from GCS to local cache.
+        Get mounted volume path for model if MOUNT_PATH is configured.
 
         Args:
             model_id: Model identifier
 
         Returns:
-            Local path to downloaded model
+            Mounted path if available and model exists, None otherwise
+        """
+        if not config.MOUNT_PATH:
+            return None
+
+        formatted_model_id = model_id.replace("/", "-")
+        base_path = os.path.join(config.MOUNT_PATH, config.GCS_MODEL_PREFIX.rstrip("/"), formatted_model_id)
+
+        # Check for merged subdirectory first (preferred for fine-tuned models)
+        merged_path = os.path.join(base_path, "merged")
+        if os.path.exists(merged_path) and os.path.isdir(merged_path):
+            # Verify it contains model files
+            if self._is_valid_model_directory(merged_path):
+                logger.info(f"Found model {model_id} in mounted volume at {merged_path}")
+                return merged_path
+
+        # Check base path
+        if os.path.exists(base_path) and os.path.isdir(base_path):
+            if self._is_valid_model_directory(base_path):
+                logger.info(f"Found model {model_id} in mounted volume at {base_path}")
+                return base_path
+
+        return None
+
+    def _is_valid_model_directory(self, path: str) -> bool:
+        """
+        Check if directory contains valid model files.
+
+        Args:
+            path: Directory path to check
+
+        Returns:
+            True if directory contains model files
+        """
+        # Check for common model files
+        required_files = ["config.json"]
+        model_file_patterns = ["pytorch_model.bin", "model.safetensors", "pytorch_model.bin.index.json"]
+
+        has_config = any(os.path.exists(os.path.join(path, f)) for f in required_files)
+        has_weights = any(os.path.exists(os.path.join(path, f)) for f in model_file_patterns)
+
+        return has_config and has_weights
+
+    async def _download_from_gcs(self, model_id: str) -> str:
+        """
+        Get model path from mounted volume or download from GCS to local cache.
+
+        If MOUNT_PATH is configured, will attempt to use mounted volume first
+        before falling back to GCS download.
+
+        Args:
+            model_id: Model identifier
+
+        Returns:
+            Path to model (mounted volume or local cache)
 
         Raises:
-            FileNotFoundError: If model not found in GCS
+            FileNotFoundError: If model not found in mounted volume or GCS
         """
+        # First, check if model is available in mounted volume
+        mounted_path = self._get_mounted_model_path(model_id)
+        if mounted_path:
+            logger.info(f"Using model from mounted volume: {mounted_path}")
+            return mounted_path
+
+        # Fall back to local cache + GCS download
         local_path = self._get_local_model_path(model_id)
 
         # Check if already cached
@@ -95,6 +167,12 @@ class ModelManager:
                 logger.info(f"Using cached merged subdirectory: {merged_path}")
                 return merged_path
             return local_path
+
+        # If GCS client is not available, we can't download
+        if not self.bucket:
+            raise FileNotFoundError(
+                f"Model {model_id} not found in mounted volume and GCS client not available"
+            )
 
         logger.info(f"Downloading model {model_id} from GCS...")
         gcs_path = self._get_gcs_model_path(model_id)
@@ -297,8 +375,16 @@ class ModelManager:
             model = AutoModelForCausalLM.from_pretrained(local_path, **load_kwargs)
             model = model.to(config.DEVICE)
         elif config.DEVICE == "cuda":
-            # NVIDIA GPU: use device_map and fp16
-            load_kwargs["torch_dtype"] = torch.float16
+            # NVIDIA GPU: use bfloat16 for better numerical stability than float16
+            # bfloat16 has same memory footprint as fp16 but wider exponent range (like fp32)
+            # This prevents the inf/nan issues seen with fp16 during sampling
+            if torch.cuda.is_bf16_supported():
+                logger.info("Using bfloat16 for CUDA (better numerical stability)")
+                load_kwargs["torch_dtype"] = torch.bfloat16
+            else:
+                # Fallback to fp32 if bfloat16 not supported (unlikely on modern GPUs)
+                logger.warning("bfloat16 not supported, falling back to fp32")
+                load_kwargs["torch_dtype"] = torch.float32
             load_kwargs["device_map"] = "auto"
             model = AutoModelForCausalLM.from_pretrained(local_path, **load_kwargs)
         else:

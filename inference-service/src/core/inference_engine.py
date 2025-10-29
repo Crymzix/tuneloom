@@ -154,6 +154,8 @@ class InferenceEngine:
         if gen_kwargs["do_sample"]:
             gen_kwargs["top_k"] = 40
             gen_kwargs["repetition_penalty"] = 1.15  # Increased to prevent loops
+            # Enable logit renormalization for numerical stability
+            gen_kwargs["renormalize_logits"] = True
         else:
             # For greedy decoding, force do_sample=False and add repetition penalty
             gen_kwargs["do_sample"] = False

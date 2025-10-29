@@ -22,12 +22,13 @@ REGION="${REGION:-us-central1}"
 SERVICE_NAME="${SERVICE_NAME:-inference-service}"
 BUCKET_NAME="${BUCKET_NAME:-}"
 IMAGE_NAME="inference-service"
+BASE_MODEL_API_KEY="${BASE_MODEL_API_KEY:-}"
 
 # GPU Configuration
 GPU_TYPE="${GPU_TYPE:-nvidia-l4}"  # Options: nvidia-l4, nvidia-tesla-t4, nvidia-a100
 GPU_COUNT="${GPU_COUNT:-1}"
-MEMORY="${MEMORY:-16Gi}"
-CPU="${CPU:-4}"
+MEMORY="${MEMORY:-32Gi}"
+CPU="${CPU:-8}"
 MAX_INSTANCES="${MAX_INSTANCES:-10}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"  # Set to 0 to scale to zero
 CONCURRENCY="${CONCURRENCY:-10}"  # Requests per instance
@@ -146,7 +147,15 @@ gcloud run deploy ${SERVICE_NAME} \
     --min-instances=${MIN_INSTANCES} \
     --port=8080 \
     --allow-unauthenticated \
-    --set-env-vars="GCS_BUCKET=${BUCKET_NAME},GCS_MODEL_PREFIX=models/,MAX_CACHED_MODELS=2,MAX_CONCURRENT_REQUESTS=50"
+    --set-env-vars="GCS_BUCKET=${BUCKET_NAME},GCS_MODEL_PREFIX=models/,MAX_CACHED_MODELS=2,MAX_CONCURRENT_REQUESTS=50,MOUNT_PATH=/mnt/gcs,BASE_MODEL_API_KEY=${BASE_MODEL_API_KEY}"
+
+# Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
+# environment variable to enable direct file access instead of downloading from GCS:
+#   --update-env-vars="MOUNT_PATH=/mnt/gcs"
+#
+# This will significantly improve cold start times by reading models directly from
+# the mounted volume. Configure volume mounts in Cloud Console:
+# https://docs.cloud.google.com/run/docs/configuring/services/cloud-storage-volume-mounts
 
 # ============================================================================
 # Step 6: Get service URL

@@ -49,8 +49,11 @@ class FineTuneJob:
         self.local_data_dir = self.local_cache_dir / "data"
         self.local_output_dir = self.local_cache_dir / "output"
 
+        # Get MOUNT_PATH from environment variable
+        mount_path = os.getenv("MOUNT_PATH", None)
+
         # Initialize components
-        self.storage = GCSStorageManager(config.job.gcs_bucket)
+        self.storage = GCSStorageManager(config.job.gcs_bucket, mount_path=mount_path)
         self.job_tracker = FirestoreJobTracker(config.job.job_id)
         self.model_manager = ModelManager(
             self.storage,
