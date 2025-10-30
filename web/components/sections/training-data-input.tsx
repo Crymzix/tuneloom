@@ -15,19 +15,15 @@ import { interFont } from '../../lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useModelStore } from '@/lib/store/model-store'
 import { Badge } from '../ui/badge'
-import { useAuth } from '@/contexts/auth-context'
 import { useTrainingData, useSaveTrainingData, TrainingDataRow } from '@/hooks/use-training-data'
 import { useDebounce } from '@/hooks/use-debounce'
 
 function TrainingDataInput() {
-    const { selectedModel, _hasHydrated } = useModelStore()
-    const { user } = useAuth()
+    const { selectedModel } = useModelStore()
 
-    // React Query hooks
     const { data: loadedData = [], isLoading: isLoadingData } = useTrainingData()
     const saveTrainingDataMutation = useSaveTrainingData()
 
-    // Local state for current rows (synced with query data)
     const [rows, setRows] = useState<TrainingDataRow[]>([
         { input: '', output: '' },
         { input: '', output: '' },
