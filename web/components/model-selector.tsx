@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUserModelsByBaseModelOnce } from "../hooks/use-fine-tune";
+import { useUserModelsByBaseModel } from "../hooks/use-fine-tune";
 import { modelGroups } from "../lib/models"
 import { useModelStore } from "../lib/store";
 import { BorderBeam } from "./ui/border-beam"
@@ -16,7 +16,7 @@ function ModelSelector({
 }) {
     const { selectedModel, setSelectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
     const selectedModelCompany = getSelectedModelCompany()
-    const { data: userModels = [], isLoading: isLoadingUserModels } = useUserModelsByBaseModelOnce(
+    const { data: userModels = [], isLoading: isLoadingUserModels } = useUserModelsByBaseModel(
         selectedModel?.hf_id || ''
     )
     const [selectedUserModel, setSelectedUserModel] = useState<UserModel | null>(null);

@@ -103,6 +103,7 @@ class JobConfig:
     output_model_name: str
     training_data_path: str
     gcs_bucket: str
+    version_label: str
     job_id: Optional[str] = None
     gcs_base_model_path: Optional[str] = None
     gcs_output_path: Optional[str] = None
@@ -119,11 +120,13 @@ class JobConfig:
             raise ValueError("training_data_path cannot be empty")
         if not self.gcs_bucket:
             raise ValueError("gcs_bucket cannot be empty")
+        if not self.version_label:
+            raise ValueError("version_label cannot be empty")
 
     @property
     def effective_gcs_output_path(self) -> str:
-        """Get the effective GCS output path."""
-        return self.gcs_output_path or f"models/{self.output_model_name}"
+        """Get the effective GCS output path with version label."""
+        return self.gcs_output_path or f"models/{self.output_model_name}/{self.version_label}"
 
     @property
     def gcs_model_id(self) -> str:

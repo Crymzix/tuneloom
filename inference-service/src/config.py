@@ -25,7 +25,11 @@ class Config:
 
     # Model Cache Configuration
     LOCAL_MODEL_CACHE = os.getenv("LOCAL_MODEL_CACHE", "/tmp/model_cache")
-    MAX_CACHED_MODELS = int(os.getenv("MAX_CACHED_MODELS", "2"))  # Cloud Run: keep small
+
+    # Soft limit: Start evicting models when memory usage exceeds this fraction (0.0-1.0)
+    MEMORY_SOFT_LIMIT = float(os.getenv("MEMORY_SOFT_LIMIT", "0.8"))  # 80% of available memory
+    # Hard limit: Minimum free memory to maintain (in GB)
+    MIN_FREE_MEMORY_GB = float(os.getenv("MIN_FREE_MEMORY_GB", "2.0"))  # Keep 2GB free
 
     # Server Configuration - Cloud Run optimized
     MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "50"))
@@ -65,13 +69,6 @@ class Config:
         if Config.IS_LOCAL:
             return 1  # Only 1 concurrent request for local testing
         return Config.MAX_CONCURRENT_REQUESTS
-
-    @staticmethod
-    def get_max_cached_models() -> int:
-        """Get max cached models based on environment."""
-        if Config.IS_LOCAL:
-            return 2  # Only keep 2 model in memory locally
-        return Config.MAX_CACHED_MODELS
 
 
 # Global config instance

@@ -235,6 +235,18 @@ function FineTune() {
         return maskApiKey(userModel.apiKeyId)
     }
 
+    const canStartFineTune = () => {
+        if (selectedUserModel) {
+            return true
+        }
+
+        if (modelNameStatus === 'available' && modelName) {
+            return true
+        }
+
+        return false;
+    }
+
     const handleStartFineTune = () => {
         if (user?.isAnonymous) {
             // Prompt user to sign up or sign in before starting fine-tuning.
@@ -550,7 +562,7 @@ function FineTune() {
                                                 size="sm"
                                                 className='bg-green-500 text-white hover:bg-green-400 border-none'
                                                 onClick={handleStartFineTune}
-                                                disabled={modelNameStatus !== 'available' || !modelName || isStarting}
+                                                disabled={!canStartFineTune() || isStarting}
                                             >
                                                 <Play className="size-4" />
                                                 Start Fine-tuning

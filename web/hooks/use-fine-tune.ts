@@ -271,7 +271,7 @@ export function useStartFineTune() {
         },
         onSuccess: (data, variables) => {
             toast.success('Fine-tune job started', {
-                description: `Your model "${variables.modelName}" is now queued for training`,
+                description: `Your model ${variables.modelName ? `"${variables.modelName}"` : ''} is now queued for training`,
             })
             // Invalidate model name check to reflect that it's now taken
             queryClient.invalidateQueries({

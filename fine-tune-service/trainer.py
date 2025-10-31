@@ -201,7 +201,7 @@ class ModelTrainer:
         training_config_dict: dict,
     ) -> None:
         """
-        Save fine-tuned model (adapter and merged) and upload to GCS.
+        Save fine-tuned model (adapter only) and upload to GCS.
 
         Args:
             trainer: Trained SFTTrainer instance
@@ -214,11 +214,8 @@ class ModelTrainer:
         # Save adapter model
         adapter_dir = self._save_adapter_model(trainer, tokenizer)
 
-        # Save merged model
-        merged_dir = self._save_merged_model(trainer, tokenizer)
-
-        # Upload to GCS
-        self._upload_models(adapter_dir, merged_dir, gcs_output_path)
+        # Upload to GCS (adapter only, no merged model)
+        self._upload_models(adapter_dir, gcs_output_path)
 
         # Save and upload training config
         self._save_training_config(training_config_dict, gcs_output_path)
@@ -323,21 +320,17 @@ class ModelTrainer:
         return merged_dir
 
     def _upload_models(
-        self, adapter_dir: Path, merged_dir: Path, gcs_output_path: str
+        self, adapter_dir: Path, gcs_output_path: str
     ) -> None:
         """
-        Upload adapter and merged models to GCS.
+        Upload adapter model to GCS.
 
         Args:
             adapter_dir: Local adapter directory
-            merged_dir: Local merged directory
             gcs_output_path: GCS path prefix
         """
         logger.info("Uploading adapter model to GCS...")
         self.storage.upload_directory(adapter_dir, f"{gcs_output_path}/adapter")
-
-        logger.info("Uploading merged model to GCS...")
-        self.storage.upload_directory(merged_dir, f"{gcs_output_path}/merged")
 
     def _save_training_config(
         self, config_dict: dict, gcs_output_path: str

@@ -7,12 +7,14 @@ import {
     FineTuneJob,
     FineTuneJobConfig,
     Model,
-    ModelApiKey
+    ModelApiKey,
+    ModelVersion
 } from '../types';
 import { getStorage } from 'firebase-admin/storage';
 import { start } from 'workflow/api';
 import { queueFineTuneJob } from '../workflows/fine-tune-workflow';
 import { decrypt } from '../utils/encryption';
+import { FieldValue } from 'firebase-admin/firestore';
 
 /**
  * Fine-tune Controller
@@ -138,14 +140,47 @@ export class FineTuneController {
 
         try {
             const result = await firestore.runTransaction(async (transaction) => {
-                // 1. Check/create model
-                const modelsRef = firestore.collection('models');
-                const modelQuery = modelsRef
-                    .where('name', '==', body.modelName)
-                    .limit(1);
-                const modelSnapshot = await transaction.get(modelQuery);
+                // Check model
+                let existingModel: Model | null = null;
+                if (body.modelName) {
+                    const modelsRef = firestore.collection('models');
+                    const modelQuery = modelsRef
+                        .where('name', '==', body.modelName)
+                        .limit(1);
+                    const modelSnapshot = await transaction.get(modelQuery);
+                    if (!modelSnapshot.empty) {
+                        const existingDoc = modelSnapshot.docs[0];
+                        const existingData = existingDoc.data();
+                        existingModel = {
+                            ...existingData,
+                            id: existingDoc.id,
+                        } as Model;
+                    }
+                } else if (body.modelId) {
+                    const modelRef = firestore.collection('models').doc(body.modelId);
+                    const modelDoc = await transaction.get(modelRef);
+                    if (modelDoc.exists) {
+                        const modelData = modelDoc.data();
+                        existingModel = {
+                            ...modelData,
+                            id: modelDoc.id,
+                        } as Model;
+                    } else {
+                        throw new ApiError(
+                            404,
+                            'Model not found with the provided modelId',
+                            'Not Found'
+                        );
+                    }
+                } else {
+                    throw new ApiError(
+                        400,
+                        'Either modelName or modelId must be provided',
+                        'Bad Request'
+                    );
+                }
 
-                // 2. Check for any running jobs for this user
+                // Check for any running jobs for this user
                 const jobsRef = firestore.collection('fine-tune-jobs');
                 const runningJobsQuery = jobsRef
                     .where('userId', '==', user.uid)
@@ -162,19 +197,17 @@ export class FineTuneController {
                     );
                 }
 
-                // 3. Create model if needed (after all reads are complete)
+                // Create model if needed
                 let model: Model
+                let modelRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>;
 
-                if (!modelSnapshot.empty) {
-                    // Model with this name exists
-                    const existingDoc = modelSnapshot.docs[0];
-                    const existingData = existingDoc.data();
+                let versionNumber = 1;
+                let versionLabel = 'v1';
+                let versionRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>;
 
-                    if (existingData.userId === user.uid) {
-                        model = {
-                            ...existingData,
-                            id: existingDoc.id,
-                        } as Model;
+                if (existingModel) {
+                    if (existingModel.userId === user.uid) {
+                        model = existingModel;
                     } else {
                         throw new ApiError(
                             409,
@@ -182,26 +215,50 @@ export class FineTuneController {
                             'Conflict'
                         );
                     }
+
+                    modelRef = firestore
+                        .collection('models')
+                        .doc(model.id);
+
+                    // Get model versions
+                    const versionsRef = modelRef.collection('versions');
+
+                    // Get existing versions to calculate version number
+                    const existingVersionsSnapshot = await transaction.get(versionsRef);
+                    versionNumber = existingVersionsSnapshot.size + 1;
+                    versionLabel = `v${versionNumber}`;
+
+                    versionRef = versionsRef.doc();
                 } else {
                     // Model doesn't exist, create it
                     const now = new Date();
-                    const newModelRef = modelsRef.doc();
+                    const newModelRef = firestore.collection('models').doc();
+                    modelRef = newModelRef;
 
-                    const modelData = {
+                    const newModel: Model = {
                         id: newModelRef.id,
                         userId: user.uid,
-                        name: body.modelName,
+                        name: body.modelName!,
                         baseModel: body.baseModel,
                         status: 'active',
                         createdAt: now,
                         updatedAt: now,
+                        activeVersionId: null,
+                        latestVersionId: null,
+                        versionCount: 0,
                     };
 
-                    transaction.set(newModelRef, modelData);
-                    model = modelData as Model;
+                    transaction.set(newModelRef, newModel);
+                    model = newModel;
+
+                    versionRef = firestore
+                        .collection('models')
+                        .doc(model.id)
+                        .collection('versions')
+                        .doc();
                 }
 
-                // 4. Create the fine-tune job
+                // Create the fine-tune job
                 const newJobRef = jobsRef.doc();
                 const now = new Date();
 
@@ -222,9 +279,37 @@ export class FineTuneController {
                     progress: 0,
                     createdAt: now,
                     updatedAt: now,
+                    modelVersionId: versionRef.id,
                 };
 
                 transaction.set(newJobRef, newJob);
+
+                // Create model version
+                const version: Omit<ModelVersion, 'id'> = {
+                    modelId: model.id,
+                    modelName: model.name,
+                    userId: model.userId,
+                    versionNumber,
+                    versionLabel,
+                    fineTuneJobId: newJobRef.id,
+                    adapterPath: `models/${model.name}/${versionLabel}`,
+                    status: 'building',
+                    baseModel: model.baseModel,
+                    createdAt: now,
+                    updatedAt: now,
+                    config: jobConfig,
+                };
+
+                transaction.set(versionRef, version);
+
+                // Update model's version tracking
+                const updateData = {
+                    latestVersionId: versionRef.id,
+                    versionCount: FieldValue.increment(1),
+                    updatedAt: now,
+                };
+
+                transaction.update(modelRef, updateData);
 
                 return {
                     jobId: newJobRef.id,

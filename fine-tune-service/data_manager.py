@@ -95,9 +95,9 @@ class DataManager:
             Path to downloaded file
         """
         local_data_file = self.local_data_dir / "training_data.jsonl"
-        self.storage.download_file(training_data_path, local_data_file)
-        logger.info(f"Downloaded training data to: {local_data_file}")
-        return local_data_file
+        actual_file_path = self.storage.download_file(training_data_path, local_data_file)
+        logger.info(f"Downloaded training data to: {actual_file_path}")
+        return actual_file_path
 
     def _format_dataset(
         self, dataset: Dataset, tokenizer: AutoTokenizer

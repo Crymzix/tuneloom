@@ -1,6 +1,6 @@
 import { CSSProperties, useMemo, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
-import { CheckIcon, HelpCircle, SettingsIcon, TargetIcon, TimerIcon, ZapIcon } from "lucide-react";
+import { CheckIcon, HelpCircle, SettingsIcon, SpoolIcon, TargetIcon, TimerIcon, ZapIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Slider } from "./ui/slider";
 import { Badge } from "./ui/badge";
@@ -220,6 +220,7 @@ function FineTuneSettings() {
             <AccordionItem value="item-1">
                 <AccordionTrigger className="group">
                     <div className="flex items-center gap-2 w-full">
+                        <SpoolIcon className="size-4" />
                         <div className="group-hover:underline">Fine-tune Settings</div>
                         <Tooltip>
                             <TooltipTrigger asChild>

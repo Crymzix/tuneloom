@@ -97,6 +97,7 @@ export interface FineTuneJob {
     failedAt?: Date;
     error?: string;
     cloudRunJobName?: string;
+    modelVersionId: string;
 }
 
 /**
@@ -112,7 +113,13 @@ export interface Model {
     createdAt: Date;
     updatedAt: Date;
     apiKeyId?: string;
-    inferenceUrl?: string;
+    inferenceUrl?: string; // Points to the active version's endpoint
+
+    // Version tracking
+    activeVersionId: string | null; // Currently deployed version
+    latestVersionId: string | null; // Most recently created version
+    versionCount: number; // Total number of versions
+
     metadata?: {
         description?: string;
         tags?: string[];
@@ -120,8 +127,56 @@ export interface Model {
 }
 
 /**
+ * Model version status
+ */
+export type ModelVersionStatus = 'building' | 'ready' | 'failed';
+
+/**
+ * Model version document stored in Firestore subcollection
+ * Path: models/{modelId}/versions/{versionId}
+ * Each fine-tune job creates a new version
+ */
+export interface ModelVersion {
+    id: string;
+    modelId: string;
+    modelName: string;
+    userId: string;
+
+    // Version identification
+    versionNumber: number; // Sequential: 1, 2, 3...
+    versionLabel: string; // "v1", "v2", "v3"...
+
+    // Fine-tune job that created this version
+    fineTuneJobId: string;
+
+    // GCS storage path: models/{modelName}/{versionLabel}
+    adapterPath: string;
+
+    // Status
+    status: ModelVersionStatus;
+
+    // Model configuration (snapshot from fine-tune job)
+    baseModel: string;
+    config: FineTuneJobConfig;
+
+    // Training metrics
+    metrics?: {
+        finalLoss?: number;
+        evalLoss?: number;
+        trainRuntime?: number;
+        trainSamplesPerSecond?: number;
+        [key: string]: unknown; // Allow additional metrics
+    };
+
+    // Timestamps
+    createdAt: Date;
+    updatedAt: Date;
+    readyAt?: Date; // When version became ready for use
+    failedAt?: Date; // When version build failed
+}
+
+/**
  * Model API key document
- *
  */
 export interface ModelApiKey {
     keyId: string;
@@ -135,6 +190,7 @@ export interface ModelApiKey {
     lastUsedAt: Date | null;
     expiresAt: Date | null;
     isActive: boolean;
+    modelVersionId?: string; // If set, key is pinned to this version; if null, uses active version
     metadata?: {
         jobId?: string;
         name?: string;

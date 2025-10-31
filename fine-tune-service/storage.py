@@ -191,46 +191,28 @@ class GCSStorageManager:
 
     def upload_directory(self, local_path: Path, gcs_path: str) -> int:
         """
-        Upload a directory to mounted volume or GCS.
+        Upload a directory to GCS using the GCS client API.
 
-        If MOUNT_PATH is configured, copies directly to mounted volume.
-        Otherwise uploads to GCS.
+        Note: Always uses GCS client API for uploads, even if MOUNT_PATH is configured.
+        GCS FUSE mounted volumes have filesystem limitations that cause permission errors
+        during write operations.
 
         Args:
             local_path: Local directory to upload
             gcs_path: GCS path prefix to upload to
 
         Returns:
-            Number of files uploaded/copied
+            Number of files uploaded
 
         Raises:
             FileNotFoundError: If the local directory does not exist
+            RuntimeError: If GCS client is not available
         """
         if not local_path.exists():
             raise FileNotFoundError(f"Local directory not found: {local_path}")
 
-        # Check if we can write to mounted volume
-        if self.mount_path:
-            mounted_dest = Path(self.mount_path) / gcs_path
-            logger.info(f"Copying {local_path} to mounted volume at {mounted_dest}")
-
-            import shutil
-            mounted_dest.parent.mkdir(parents=True, exist_ok=True)
-
-            # Copy entire directory to mounted volume
-            if mounted_dest.exists():
-                shutil.rmtree(mounted_dest)
-            shutil.copytree(local_path, mounted_dest)
-
-            files = list(local_path.rglob("*"))
-            files = [f for f in files if f.is_file()]
-
-            logger.info(f"Copy complete: {len(files)} files to mounted volume")
-            return len(files)
-
-        # Fall back to uploading to GCS
         if not self.bucket:
-            raise RuntimeError("Cannot upload: GCS client not available and no mounted volume")
+            raise RuntimeError("Cannot upload: GCS client not available")
 
         logger.info(f"Uploading {local_path} to gs://{self.bucket_name}/{gcs_path}")
 
@@ -252,10 +234,11 @@ class GCSStorageManager:
 
     def upload_file(self, local_path: Path, gcs_path: str) -> None:
         """
-        Upload a single file to mounted volume or GCS.
+        Upload a single file to GCS using the GCS client API.
 
-        If MOUNT_PATH is configured, copies directly to mounted volume.
-        Otherwise uploads to GCS.
+        Note: Always uses GCS client API for uploads, even if MOUNT_PATH is configured.
+        GCS FUSE mounted volumes have filesystem limitations that cause permission errors
+        during write operations.
 
         Args:
             local_path: Local file path
@@ -263,25 +246,13 @@ class GCSStorageManager:
 
         Raises:
             FileNotFoundError: If the local file does not exist
+            RuntimeError: If GCS client is not available
         """
         if not local_path.exists():
             raise FileNotFoundError(f"Local file not found: {local_path}")
 
-        # Check if we can write to mounted volume
-        if self.mount_path:
-            mounted_dest = Path(self.mount_path) / gcs_path
-            logger.info(f"Copying file {local_path} to mounted volume at {mounted_dest}")
-
-            import shutil
-            mounted_dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(local_path, mounted_dest)
-
-            logger.info("File copied successfully to mounted volume")
-            return
-
-        # Fall back to uploading to GCS
         if not self.bucket:
-            raise RuntimeError("Cannot upload: GCS client not available and no mounted volume")
+            raise RuntimeError("Cannot upload: GCS client not available")
 
         logger.info(f"Uploading file {local_path} to gs://{self.bucket_name}/{gcs_path}")
 

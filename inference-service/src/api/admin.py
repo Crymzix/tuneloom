@@ -76,4 +76,72 @@ def create_admin_router(model_manager: ModelManager) -> APIRouter:
 
         return stats
 
+    @router.post("/admin/invalidate-cache/{model_name}")
+    async def invalidate_model_cache(
+        model_name: str,
+        auth: Dict[str, Any] = Depends(verify_api_key)
+    ):
+        """
+        Invalidate version cache for a model and optionally unload it.
+
+        This forces the inference service to re-resolve the active version
+        from Firestore on the next request. Useful after activating a new version.
+
+        Args:
+            model_name: Name of the model to invalidate cache for
+
+        Note: Requires authentication.
+        """
+        # Invalidate version cache
+        was_cached = model_manager.version_resolver.invalidate_cache(model_name)
+
+        # Optionally unload the model to force reload
+        was_loaded = model_name in model_manager.list_loaded_models()
+        if was_loaded:
+            await model_manager.unload_model(model_name)
+
+        return {
+            "message": f"Cache invalidated for {model_name}",
+            "version_cache_cleared": was_cached,
+            "model_unloaded": was_loaded,
+            "requestedBy": auth.get("userId")
+        }
+
+    @router.post("/admin/clear-all-version-cache")
+    async def clear_all_version_cache(
+        auth: Dict[str, Any] = Depends(verify_api_key)
+    ):
+        """
+        Clear all cached version data.
+
+        Forces all subsequent requests to re-resolve active versions from Firestore.
+
+        Note: Requires authentication.
+        """
+        cleared_count = model_manager.version_resolver.clear_cache()
+
+        return {
+            "message": "All version cache cleared",
+            "entries_cleared": cleared_count,
+            "requestedBy": auth.get("userId")
+        }
+
+    @router.get("/admin/version-cache-stats")
+    async def get_version_cache_stats(
+        auth: Dict[str, Any] = Depends(verify_api_key)
+    ):
+        """
+        Get version cache statistics.
+
+        Shows which models have cached version info and cache age.
+
+        Note: Requires authentication.
+        """
+        cache_stats = model_manager.version_resolver.get_cache_stats()
+
+        return {
+            **cache_stats,
+            "requestedBy": auth.get("userId")
+        }
+
     return router

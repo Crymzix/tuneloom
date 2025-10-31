@@ -4,10 +4,18 @@ import { ChatController } from '../controllers/chat.controller';
 import { TrainingDataController } from '../controllers/training-data.controller';
 import { FineTuneController } from '../controllers/fine-tune.controller';
 import { ModelNameController } from '../controllers/model-name.controller';
+import { ModelVersionsController } from '../controllers/model-versions.controller';
 import { errorHandler } from '../middleware/error-handler';
 import { API_CONFIG } from '../config/constants';
 import { authMiddleware } from '../middleware/auth';
 import { validateRequest, validateQuery, schemas } from '../middleware/validation';
+import { setGlobalDispatcher, Agent } from 'undici';
+
+// Workaround for Vercel Workflow long-running steps in local development
+// See: https://github.com/vercel/workflow/issues/137
+setGlobalDispatcher(new Agent({
+    headersTimeout: 0,
+}));
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = API_CONFIG.MAX_DURATION;
@@ -84,6 +92,50 @@ app.get(
     authMiddleware,
     validateQuery(schemas.checkModelNameQuery),
     ModelNameController.checkModelName
+);
+
+/**
+ * Model version endpoints
+ */
+
+/**
+ * List all versions for a model
+ * GET /api/models/:modelId/versions
+ */
+app.get(
+    '/models/:modelId/versions',
+    authMiddleware,
+    ModelVersionsController.listVersions
+);
+
+/**
+ * Get active version for a model
+ * GET /api/models/:modelId/active-version
+ */
+app.get(
+    '/models/:modelId/active-version',
+    authMiddleware,
+    ModelVersionsController.getActiveVersion
+);
+
+/**
+ * Get a specific version
+ * GET /api/models/:modelId/versions/:versionId
+ */
+app.get(
+    '/models/:modelId/versions/:versionId',
+    authMiddleware,
+    ModelVersionsController.getVersion
+);
+
+/**
+ * Activate a specific version
+ * POST /api/models/:modelId/versions/:versionId/activate
+ */
+app.post(
+    '/models/:modelId/versions/:versionId/activate',
+    authMiddleware,
+    ModelVersionsController.activateVersion
 );
 
 /**

@@ -48,7 +48,6 @@ def create_app() -> FastAPI:
 
         logger.info(f"GCS Bucket: {config.GCS_BUCKET}")
         logger.info(f"Max concurrent requests: {config.get_max_concurrent()}")
-        logger.info(f"Max cached models: {config.get_max_cached_models()}")
         logger.info(f"Authentication required: {config.REQUIRE_AUTH}")
         if config.BASE_MODEL_API_KEY:
             logger.info("Base model static API key configured")
