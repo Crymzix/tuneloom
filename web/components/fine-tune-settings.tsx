@@ -235,7 +235,7 @@ function FineTuneSettings() {
                             </TooltipTrigger>
                             <TooltipContent
                                 arrowClassName="bg-white fill-white"
-                                className="w-64 bg-white shadow-lg text-black"
+                                className="w-52 bg-white shadow-lg text-black"
                             >
                                 Estimated based on your model size, number of training examples, and epochs selected. Larger models and more training data will take longer to fine-tune.
                             </TooltipContent>

@@ -303,6 +303,54 @@ export function useStartFineTune() {
 }
 
 /**
+ * Hook to activate a specific version of a model
+ */
+export function useActivateVersion() {
+    const { user } = useAuth()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({ modelId, versionId }: { modelId: string; versionId: string }) => {
+            if (!user) {
+                throw new Error('User not authenticated')
+            }
+
+            const token = await user.getIdToken()
+            const response = await fetch(`/api/models/${modelId}/versions/${versionId}/activate`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                const errorMessage = data.error || data.message || 'Failed to activate version'
+                throw new Error(errorMessage)
+            }
+
+            return data
+        },
+        onSuccess: () => {
+            toast.success('Version activated', {
+                description: 'The selected version is now active',
+            })
+            // Invalidate user models to reflect the new active version
+            queryClient.invalidateQueries({
+                queryKey: ['user-models-by-base'],
+            })
+        },
+        onError: (error: Error) => {
+            console.error('Error activating version:', error)
+            toast.error('Failed to activate version', {
+                description: error.message || 'An unexpected error occurred. Please try again.',
+            })
+        },
+    })
+}
+
+/**
  * Hook to fetch model versions with real-time updates
  */
 export function useModelVersions(modelId: string | undefined) {

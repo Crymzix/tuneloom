@@ -496,23 +496,25 @@ function FineTune() {
                                                 <PopoverTrigger asChild>
                                                     <Button
                                                         size="sm"
-                                                        className='bg-green-500 text-white hover:bg-green-400 border-none'
+                                                        className='relative bg-green-500 text-white hover:bg-green-400 border-none overflow-hidden'
                                                     >
                                                         <div
-                                                            className='animate-aurora absolute -z-10 bg-[length:200%_auto] w-64 h-24'
+                                                            className='animate-aurora absolute bg-[length:200%_auto] w-64 h-24'
                                                             style={{
-                                                                backgroundImage: `linear-gradient(135deg, ${["#9500ffff", "#4e28caff", "#0070F3", "#38bdf8"].join(", ")}, ${"#FF0080"
+                                                                backgroundImage: `linear-gradient(135deg, ${["#bfdbfe", "#2863caff", "#0070F3", "#38bdf8"].join(", ")}, ${"#bfdbfe"
                                                                     })`,
                                                                 animationDuration: `10s`,
                                                             }}
                                                         >
                                                         </div>
-                                                        <Loader2 className="size-4 animate-spin" />
-                                                        {
-                                                            hasRunningJobs ? 'Fine-tune in progress...' : (
-                                                                hasQueuedJobs ? 'Job queued...' : 'Starting...'
-                                                            )
-                                                        }
+                                                        <Loader2 className="size-4 animate-spin z-10" />
+                                                        <div className='z-10'>
+                                                            {
+                                                                hasRunningJobs ? 'Fine-tune in progress...' : (
+                                                                    hasQueuedJobs ? 'Job queued...' : 'Starting...'
+                                                                )
+                                                            }
+                                                        </div>
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className='border-none' align='end'>

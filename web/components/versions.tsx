@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2, Loader2, PackageIcon, StarIcon } from "lucid
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./ui/empty"
 import { ScrollArea } from "./ui/scroll-area"
 import { Skeleton } from "./ui/skeleton"
-import { useModelVersions, useUserModelsByBaseModel } from "../hooks/use-fine-tune"
+import { useModelVersions, useUserModelsByBaseModel, useActivateVersion } from "../hooks/use-fine-tune"
 import { formatDate } from "../lib/utils"
 import { ModelVersionStatus } from "../lib/fine-tune-jobs"
 import { useModelStore } from "../lib/store"
@@ -17,10 +17,18 @@ function Versions({ modelId }: VersionsProps) {
     const { selectedModel } = useModelStore()
     const { data: userModels = [], isLoading: loadingUserModels } = useUserModelsByBaseModel(selectedModel?.hf_id || '')
     const { data: versions = [], isLoading: loadingVersions } = useModelVersions(modelId)
+    const activateVersion = useActivateVersion()
 
     const currentModel = useMemo(() => {
         return userModels.find(model => model.id === modelId)
     }, [userModels, modelId])
+
+    const handleActivateVersion = (versionId: string) => {
+        if (!modelId) {
+            return
+        }
+        activateVersion.mutate({ modelId, versionId })
+    }
 
     const getStatusIcon = (status: ModelVersionStatus) => {
         switch (status) {
@@ -51,7 +59,7 @@ function Versions({ modelId }: VersionsProps) {
                 {versions.map((version, index) => (
                     <div
                         key={version.id}
-                        className={`p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === versions.length - 1 ? '' : ''
+                        className={`group p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === versions.length - 1 ? '' : ''
                             }`}
                     >
                         <div className="flex items-start justify-between gap-4">
@@ -92,7 +100,7 @@ function Versions({ modelId }: VersionsProps) {
                                         <span>Ready: {formatDate(version.readyAt)}</span>
                                     )}
                                     {
-                                        currentModel?.activeVersionId === version.id && (
+                                        currentModel?.activeVersionId === version.id ?
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <div className="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md bg-sky-100 text-sky-700 text-center ml-auto">
@@ -103,8 +111,21 @@ function Versions({ modelId }: VersionsProps) {
                                                 <TooltipContent>
                                                     This version is currently deployed
                                                 </TooltipContent>
-                                            </Tooltip>
-                                        )
+                                            </Tooltip> :
+                                            version.status === 'ready' && (
+                                                <button
+                                                    onClick={() => handleActivateVersion(version.id)}
+                                                    disabled={activateVersion.isPending}
+                                                    className="cursor-pointer invisible group-hover:visible flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md bg-sky-100 hover:bg-sky-200 text-sky-700 text-center ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {activateVersion.isPending ? (
+                                                        <Loader2 className="size-3 animate-spin" />
+                                                    ) : (
+                                                        <StarIcon className="size-3" />
+                                                    )}
+                                                    Activate
+                                                </button>
+                                            )
                                     }
                                 </div>
                             </div>

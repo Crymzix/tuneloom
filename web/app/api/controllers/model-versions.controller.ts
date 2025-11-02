@@ -2,6 +2,8 @@ import { AuthContext } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { ModelVersion, Model } from '../types';
+import { start } from 'workflow/api';
+import { activateModelVersion, ActivateModelVersionParams } from '../workflows/activate-model-version-workflow';
 
 /**
  * Model Versions Controller
@@ -240,62 +242,15 @@ export class ModelVersionsController {
         }
 
         try {
-            const firestore = getAdminFirestore();
+            const params = {
+                modelId,
+                modelVersionId: versionId,
+                userId: user.uid,
+            } as ActivateModelVersionParams
 
-            let modelName: string = '';
-
-            // Run as transaction to ensure consistency
-            await firestore.runTransaction(async (transaction) => {
-                const modelRef = firestore.collection('models').doc(modelId);
-                const modelDoc = await transaction.get(modelRef);
-
-                if (!modelDoc.exists) {
-                    throw new ApiError(404, 'Model not found', 'Not Found');
-                }
-
-                const modelData = modelDoc.data() as Model;
-                modelName = modelData.name; // Save for cache invalidation
-
-                if (modelData.userId !== user.uid) {
-                    throw new ApiError(
-                        403,
-                        'You do not have permission to modify this model',
-                        'Forbidden'
-                    );
-                }
-
-                // Check that the version exists and is ready
-                const versionRef = modelRef.collection('versions').doc(versionId);
-                const versionDoc = await transaction.get(versionRef);
-
-                if (!versionDoc.exists) {
-                    throw new ApiError(404, 'Version not found', 'Not Found');
-                }
-
-                const versionData = versionDoc.data() as Omit<ModelVersion, 'id'>;
-
-                if (versionData.status !== 'ready') {
-                    throw new ApiError(
-                        400,
-                        `Cannot activate version with status: ${versionData.status}. Version must be ready.`,
-                        'Bad Request'
-                    );
-                }
-
-                transaction.update(modelRef, {
-                    activeVersionId: versionId,
-                    updatedAt: new Date(),
-                });
-            });
-
-            // Invalidate inference service cache for this model (best effort, don't fail activation if this fails)
-            if (modelName) {
-                try {
-                    await this.invalidateInferenceCache(modelName);
-                } catch (error) {
-                    console.warn(`Failed to invalidate inference cache for ${modelName}:`, error);
-                }
-            }
+            const run = await start(activateModelVersion, [params]);
+            // Wait for the workflow to complete
+            await run.returnValue;
 
             return c.json({
                 success: true,
@@ -312,43 +267,9 @@ export class ModelVersionsController {
             throw new ApiError(
                 500,
                 'Failed to activate version',
-                'Internal Server Error'
+                error instanceof Error ? error.message : 'Internal Server Error'
             );
         }
     }
 
-    /**
-     * Invalidate inference service cache for a model
-     * Called after activating a new version to force re-resolution
-     * This is a helper method, not exposed as an endpoint
-     */
-    private static async invalidateInferenceCache(modelName: string): Promise<void> {
-        const inferenceUrl = process.env.OPENAI_COMPATIBLE_BASE_URL;
-
-        if (!inferenceUrl) {
-            console.warn('OPENAI_COMPATIBLE_BASE_URL not configured, skipping cache invalidation');
-            return;
-        }
-
-        const url = `${inferenceUrl}/admin/invalidate-cache/${modelName}`;
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${process.env.BASE_MODEL_API_KEY}`,
-                },
-            });
-
-            if (!response.ok) {
-                console.warn(`Inference cache invalidation returned ${response.status} for ${modelName}`);
-            } else {
-                console.log(`Successfully invalidated inference cache for ${modelName}`);
-            }
-        } catch (error) {
-            // Don't throw - this is best effort
-            console.warn(`Failed to call inference cache invalidation for ${modelName}:`, error);
-        }
-    }
 }
