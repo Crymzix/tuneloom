@@ -32,6 +32,7 @@ interface StartFineTuneRequest {
     modelId?: string
     baseModel: string
     settings?: FineTuneSettings
+    recaptchaToken?: string
 }
 
 interface StartFineTuneResponse {

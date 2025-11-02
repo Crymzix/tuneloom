@@ -1,12 +1,26 @@
 import { UIMessage } from 'ai';
 
 /**
+ * Model behavior settings for generation
+ */
+export interface ModelSettings {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    maxTokens?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+}
+
+/**
  * Request body for chat endpoint
  */
 export interface ChatRequest {
     modelId: string;
     messages: UIMessage[];
     apiKey?: string;
+    recaptchaToken?: string;
+    settings?: ModelSettings;
 }
 
 /**
@@ -14,6 +28,7 @@ export interface ChatRequest {
  */
 export interface TrainingDataRequest {
     prompt: string;
+    recaptchaToken?: string;
 }
 
 /**
@@ -216,6 +231,7 @@ export interface StartFineTuneRequest {
     modelId?: string;
     baseModel: string;
     settings?: FineTuneSettings;
+    recaptchaToken?: string;
 }
 
 /**

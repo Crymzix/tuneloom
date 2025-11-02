@@ -4,6 +4,7 @@ import { createCustomProvider, customProvider } from '../config/providers';
 import { ChatRequest } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { MODEL_IDS } from '../config/constants';
+import { requireRecaptcha } from '../utils/recaptcha';
 
 /**
  * Chat Controller
@@ -17,12 +18,25 @@ export class ChatController {
     static async streamChat(c: Context): Promise<Response> {
         try {
             // Get validated data from middleware
-            const { modelId, messages, apiKey } = c.get('validatedData') as ChatRequest;
+            const { modelId, messages, apiKey, recaptchaToken, settings } = c.get('validatedData') as ChatRequest;
+
+            await requireRecaptcha(recaptchaToken);
+
+            // Build streamText options with model settings
+            const baseOptions = {
+                messages: convertToModelMessages(messages),
+                ...(settings?.temperature !== undefined && { temperature: settings.temperature }),
+                ...(settings?.topP !== undefined && { topP: settings.topP }),
+                ...(settings?.topK !== undefined && { topK: settings.topK }),
+                ...(settings?.maxTokens !== undefined && { maxOutputTokens: settings.maxTokens }),
+                ...(settings?.frequencyPenalty !== undefined && { frequencyPenalty: settings.frequencyPenalty }),
+                ...(settings?.presencePenalty !== undefined && { presencePenalty: settings.presencePenalty }),
+            };
 
             if (Object.values(MODEL_IDS).includes(modelId as any)) {
                 const result = streamText({
                     model: customProvider(modelId),
-                    messages: convertToModelMessages(messages),
+                    ...baseOptions,
                 });
 
                 return result.toUIMessageStreamResponse();
@@ -33,7 +47,7 @@ export class ChatController {
                 const provider = createCustomProvider(modelId, apiKey)
                 const result = streamText({
                     model: provider(modelId),
-                    messages: convertToModelMessages(messages),
+                    ...baseOptions,
                 });
 
                 return result.toUIMessageStreamResponse();

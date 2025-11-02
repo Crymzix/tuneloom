@@ -128,6 +128,9 @@ function ModelSelector({
                                 value={'base-model'}
                                 className="text-slate-400 focus:text-slate-400 hover:text-slate-400"
                             >
+                                {
+                                    isLoadingUserModels ? <Loader2Icon className="animate-spin" /> : null
+                                }
                                 <BrainIcon className="text-slate-400 size-3" />
                                 Base Model
                             </SelectItem>

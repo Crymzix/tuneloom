@@ -148,3 +148,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* reCAPTCHA badge styling */
+.grecaptcha-badge {
+  z-index: 50 !important; /* Adjust this value as needed */
+}

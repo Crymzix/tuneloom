@@ -15,6 +15,7 @@ import { start } from 'workflow/api';
 import { queueFineTuneJob } from '../workflows/fine-tune-workflow';
 import { decrypt } from '../utils/encryption';
 import { FieldValue } from 'firebase-admin/firestore';
+import { requireRecaptcha } from '../utils/recaptcha';
 
 /**
  * Fine-tune Controller
@@ -135,6 +136,9 @@ export class FineTuneController {
         }
 
         const body = c.get('validatedData') as StartFineTuneRequest;
+        const recaptchaToken = body.recaptchaToken;
+
+        await requireRecaptcha(recaptchaToken);
 
         const firestore = getAdminFirestore();
 

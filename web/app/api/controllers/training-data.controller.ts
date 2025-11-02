@@ -4,6 +4,7 @@ import { googleProvider, MODELS } from '../config/providers';
 import { TRAINING_DATA_CONFIG } from '../config/constants';
 import { TrainingDataRequest } from '../types';
 import { ApiError } from '../middleware/error-handler';
+import { requireRecaptcha } from '../utils/recaptcha';
 
 /**
  * Training Data Controller
@@ -17,7 +18,9 @@ export class TrainingDataController {
     static async generateTrainingData(c: Context): Promise<Response> {
         try {
             // Get validated data from middleware
-            const { prompt } = c.get('validatedData') as TrainingDataRequest;
+            const { prompt, recaptchaToken } = c.get('validatedData') as TrainingDataRequest;
+
+            await requireRecaptcha(recaptchaToken);
 
             const result = streamText({
                 model: googleProvider(MODELS.GOOGLE_GEMINI_FLASH),

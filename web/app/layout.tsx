@@ -5,6 +5,8 @@ import { ScrollProvider } from "@/contexts/scroll-context";
 import { ScrollAreaWrapper } from "@/components/scroll-area-wrapper";
 import { AuthProvider } from "@/contexts/auth-context";
 import { QueryProvider } from "@/contexts/query-provider";
+import { RecaptchaProvider } from "@/contexts/recaptcha-context";
+import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -34,11 +36,13 @@ export default function RootLayout({
             >
                 <QueryProvider>
                     <AuthProvider>
-                        <ScrollProvider>
-                            <ScrollAreaWrapper className="h-screen w-screen">
-                                {children}
-                            </ScrollAreaWrapper>
-                        </ScrollProvider>
+                        <RecaptchaProvider>
+                            <ScrollProvider>
+                                <ScrollAreaWrapper className="h-screen w-screen">
+                                    {children}
+                                </ScrollAreaWrapper>
+                            </ScrollProvider>
+                        </RecaptchaProvider>
                     </AuthProvider>
                 </QueryProvider>
                 <Toaster />

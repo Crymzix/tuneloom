@@ -104,7 +104,7 @@ function Versions({ modelId }: VersionsProps) {
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <div className="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md bg-sky-100 text-sky-700 text-center ml-auto">
-                                                        <StarIcon className="size-3" />
+                                                        <StarIcon fill="#0369a1" className="size-3" />
                                                         Active
                                                     </div>
                                                 </TooltipTrigger>

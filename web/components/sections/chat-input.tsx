@@ -2,7 +2,7 @@
 
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
-import { ArrowDownIcon, Loader2Icon, SendIcon, User2Icon, XCircleIcon } from "lucide-react"
+import { ArrowDownIcon, InfoIcon, Loader2Icon, RotateCcwIcon, SendIcon, Settings2Icon, TrashIcon, User2Icon, XCircleIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useChat } from '@ai-sdk/react';
 import { motion, AnimatePresence } from "motion/react";
@@ -14,7 +14,26 @@ import { useModelStore } from "../../lib/store/model-store"
 import { useAuth } from "../../contexts/auth-context"
 import { ModelSelector } from "../model-selector"
 import { useGetApiKey } from "../../hooks/use-fine-tune"
-import { UserModel } from "../../lib/fine-tune-jobs"
+import { useRecaptcha } from "../../contexts/recaptcha-context"
+import { toast } from "sonner"
+import SlidingTabs from "../ui/sliding-tab"
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { Slider } from "../ui/slider"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
+
+const playgroundTabs = [
+    { id: 'chat', label: 'Chat' },
+    { id: 'completion', label: 'Completion' },
+]
+
+const DEFAULT_MODEL_SETTINGS = {
+    temperature: 1.0,
+    topP: 1.0,
+    topK: 50,
+    maxTokens: 1024,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+}
 
 function ChatInput() {
     const { user } = useAuth()
@@ -31,7 +50,25 @@ function ChatInput() {
 
     const [isAtBottom, setIsAtBottom] = useState(true);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [activeTab, setActiveTab] = useState<string>('chat')
     const scrollViewportRef = useRef<HTMLDivElement>(null);
+    const { executeRecaptcha } = useRecaptcha();
+
+    const [temperature, setTemperature] = useState(DEFAULT_MODEL_SETTINGS.temperature);
+    const [topP, setTopP] = useState(DEFAULT_MODEL_SETTINGS.topP);
+    const [topK, setTopK] = useState(DEFAULT_MODEL_SETTINGS.topK);
+    const [maxTokens, setMaxTokens] = useState(DEFAULT_MODEL_SETTINGS.maxTokens);
+    const [frequencyPenalty, setFrequencyPenalty] = useState(DEFAULT_MODEL_SETTINGS.frequencyPenalty);
+    const [presencePenalty, setPresencePenalty] = useState(DEFAULT_MODEL_SETTINGS.presencePenalty);
+
+    const resetToDefaults = () => {
+        setTemperature(DEFAULT_MODEL_SETTINGS.temperature);
+        setTopP(DEFAULT_MODEL_SETTINGS.topP);
+        setTopK(DEFAULT_MODEL_SETTINGS.topK);
+        setMaxTokens(DEFAULT_MODEL_SETTINGS.maxTokens);
+        setFrequencyPenalty(DEFAULT_MODEL_SETTINGS.frequencyPenalty);
+        setPresencePenalty(DEFAULT_MODEL_SETTINGS.presencePenalty);
+    };
 
     const selectedModelCompany = getSelectedModelCompany()
 
@@ -41,7 +78,29 @@ function ChatInput() {
     )
 
     const handleSendMessage = async () => {
+        const recaptchaToken = await executeRecaptcha();
+        if (!recaptchaToken) {
+            toast.error('reCAPTCHA verification failed', {
+                description: 'Please try again.'
+            });
+            return;
+        }
+
+        if (isLoading) {
+            return;
+        }
+
         const token = await user?.getIdToken();
+
+        const modelSettings = {
+            temperature,
+            topP,
+            topK,
+            maxTokens,
+            frequencyPenalty,
+            presencePenalty,
+        };
+
         if (selectedUserModel) {
             sendMessage({
                 text: chatInput,
@@ -52,6 +111,8 @@ function ChatInput() {
                 body: {
                     modelId: selectedUserModel.name,
                     apiKey: apiKeyData?.keySecret || '',
+                    recaptchaToken,
+                    settings: modelSettings,
                 }
             });
         } else {
@@ -63,6 +124,8 @@ function ChatInput() {
                 },
                 body: {
                     modelId: selectedModel.hf_id,
+                    recaptchaToken,
+                    settings: modelSettings,
                 }
             });
         }
@@ -243,9 +306,218 @@ function ChatInput() {
                 }}
             >
                 <div className="w-full max-w-xl bg-blue-100 rounded-md flex flex-col shadow-xs">
+                    <div className="flex items-center justify-between">
+                        <SlidingTabs
+                            tabs={playgroundTabs}
+                            activeTab={activeTab}
+                            onTabChange={setActiveTab}
+                            className="bg-blue-100"
+                            tabClassName="text-sm"
+                            tabIndicatorClassName="bg-blue-200"
+                        />
+                        <div className="p-2 flex items-center gap-2">
+                            <AnimatePresence>
+                                {
+                                    messages.length > 0 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.8 }}
+                                        >
+                                            <div
+                                                onClick={() => setMessages([])}
+                                                className="h-[28px] flex items-center justify-center px-2 py-1 text-sm font-medium rounded-md bg-blue-200 cursor-pointer hover:bg-blue-300/50"
+                                            >
+                                                <TrashIcon className="size-4" />
+                                            </div>
+                                        </motion.div>
+                                    )
+                                }
+                            </AnimatePresence>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <div className="h-[28px] flex items-center justify-center px-2 py-1 text-sm font-medium rounded-md bg-blue-200 cursor-pointer hover:bg-blue-300/50">
+                                        <Settings2Icon className="size-4" />
+                                    </div>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" className='border-none w-80'>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="font-semibold text-xs">Model Settings</h3>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={resetToDefaults}
+                                                className="h-7 px-2 text-xs gap-1.5"
+                                            >
+                                                <RotateCcwIcon className="size-3.5" />
+                                                Reset
+                                            </Button>
+                                        </div>
+
+                                        {/* Temperature */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Temperature</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Controls randomness in the output. Lower values (0-0.5) make responses more focused and deterministic. Higher values (1-2) increase creativity and variability.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{temperature.toFixed(2)}</span>
+                                            </div>
+                                            <Slider
+                                                value={[temperature]}
+                                                onValueChange={(values) => setTemperature(values[0])}
+                                                min={0}
+                                                max={2}
+                                                step={0.01}
+                                                className="w-full"
+                                            />
+                                        </div>
+
+                                        {/* Top P */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Top P</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Nucleus sampling: only considers tokens whose cumulative probability adds up to this value. Lower values (0.1-0.5) focus on likely tokens, higher values (0.9-1) allow more diversity.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{topP.toFixed(2)}</span>
+                                            </div>
+                                            <Slider
+                                                value={[topP]}
+                                                onValueChange={(values) => setTopP(values[0])}
+                                                min={0}
+                                                max={1}
+                                                step={0.01}
+                                                className="w-full"
+                                            />
+                                        </div>
+
+                                        {/* Top K */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Top K</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Limits the model to consider only the top K most likely tokens. Lower values (10-20) make output more predictable, higher values (50-100) allow more variety.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{topK}</span>
+                                            </div>
+                                            <Slider
+                                                value={[topK]}
+                                                onValueChange={(values) => setTopK(Math.round(values[0]))}
+                                                min={1}
+                                                max={100}
+                                                step={1}
+                                                className="w-full"
+                                            />
+                                        </div>
+
+                                        {/* Max Tokens */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Max Tokens</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Maximum number of tokens (words/subwords) in the model's response. One token ≈ 4 characters in English. Set lower for concise responses, higher for detailed ones.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{maxTokens}</span>
+                                            </div>
+                                            <Slider
+                                                value={[maxTokens]}
+                                                onValueChange={(values) => setMaxTokens(Math.round(values[0]))}
+                                                min={1}
+                                                max={4096}
+                                                step={1}
+                                                className="w-full"
+                                            />
+                                        </div>
+
+                                        {/* Frequency Penalty */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Frequency Penalty</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Reduces the likelihood of repeating the same words or phrases. Positive values (0-2) discourage repetition, negative values (-2-0) encourage it. 0 means no penalty.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{frequencyPenalty.toFixed(2)}</span>
+                                            </div>
+                                            <Slider
+                                                value={[frequencyPenalty]}
+                                                onValueChange={(values) => setFrequencyPenalty(values[0])}
+                                                min={-2}
+                                                max={2}
+                                                step={0.01}
+                                                className="w-full"
+                                            />
+                                        </div>
+
+                                        {/* Presence Penalty */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <label className="text-xs font-medium">Presence Penalty</label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="right" className="max-w-xs">
+                                                            Encourages the model to talk about new topics. Positive values (0-2) promote discussing new subjects, negative values (-2-0) allow revisiting topics. 0 means no penalty.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground">{presencePenalty.toFixed(2)}</span>
+                                            </div>
+                                            <Slider
+                                                value={[presencePenalty]}
+                                                onValueChange={(values) => setPresencePenalty(values[0])}
+                                                min={-2}
+                                                max={2}
+                                                step={0.01}
+                                                className="w-full"
+                                            />
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    </div>
                     <Textarea
                         className="resize-none py-3 focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] shadow-none"
-                        placeholder="Chat with your model..."
+                        placeholder={activeTab === 'chat' ? "Chat with your model..." : "Enter your prompt for completion..."}
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyDown={(e) => {

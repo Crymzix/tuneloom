@@ -17,6 +17,7 @@ import { useModelStore } from '@/lib/store/model-store'
 import { Badge } from '../ui/badge'
 import { useTrainingData, useSaveTrainingData, TrainingDataRow } from '@/hooks/use-training-data'
 import { useDebounce } from '@/hooks/use-debounce'
+import { useRecaptcha } from '@/contexts/recaptcha-context'
 
 function TrainingDataInput() {
     const { selectedModel } = useModelStore()
@@ -35,6 +36,7 @@ function TrainingDataInput() {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const scrollAreaRef = useRef<HTMLDivElement>(null)
     const hasInitializedRef = useRef(false)
+    const { executeRecaptcha } = useRecaptcha()
 
     const { complete, completion, isLoading } = useCompletion({
         api: '/api/generate-training-data',
@@ -215,8 +217,20 @@ function TrainingDataInput() {
             return
         }
 
+        const recaptchaToken = await executeRecaptcha();
+        if (!recaptchaToken) {
+            toast.error('reCAPTCHA verification failed', {
+                description: 'Please try again.'
+            });
+            return;
+        }
+
         try {
-            await complete(generationPrompt)
+            await complete(generationPrompt, {
+                body: {
+                    recaptchaToken,
+                }
+            })
         } catch (error) {
             console.error('Error generating training data:', error)
             toast.error('Generation failed', {
