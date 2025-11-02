@@ -19,10 +19,19 @@ interface CheckModelNameResponse {
     error?: string
 }
 
+interface FineTuneSettings {
+    epochs?: number
+    learningRate?: number
+    loraRank?: number
+    loraAlpha?: number
+    loraDropout?: number
+}
+
 interface StartFineTuneRequest {
     modelName?: string
     modelId?: string
     baseModel: string
+    settings?: FineTuneSettings
 }
 
 interface StartFineTuneResponse {

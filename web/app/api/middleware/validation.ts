@@ -46,6 +46,15 @@ export const schemas = {
         modelId: z.string().optional(),
         modelName: z.string().optional(),
         baseModel: z.string().min(1, 'Base model is required'),
+
+        // Fine-tune hyperparameters as nested object (optional)
+        settings: z.object({
+            epochs: z.number().min(1).max(100).optional(),
+            learningRate: z.number().min(0.000001).max(1).optional(),
+            loraRank: z.number().min(1).max(256).optional(),
+            loraAlpha: z.number().min(1).max(512).optional(),
+            loraDropout: z.number().min(0).max(1).optional(),
+        }).optional(),
     }).refine(
         (data) => !!(data.modelId) !== !!(data.modelName),
         {

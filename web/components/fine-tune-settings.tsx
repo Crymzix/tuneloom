@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useModelStore } from "../lib/store";
 import { useTrainingData } from "@/hooks/use-training-data";
 
-interface FineTuneConfig {
+export interface FineTuneConfig {
     epochs: number;
     learningRate: number;
     loraRank: number;
@@ -17,6 +17,11 @@ interface FineTuneConfig {
     loraDropout: number;
     batchSize: number;
     maxSeqLength?: number;
+}
+
+interface FineTuneSettingsProps {
+    config: FineTuneConfig;
+    setConfig: (config: FineTuneConfig) => void;
 }
 
 type PresetKey = 'quick' | 'balanced' | 'custom';
@@ -91,29 +96,21 @@ const MODEL_SPEEDS: Record<ModelSize, {
     memory4bit: number;
     memoryNoQuant: number
 }> = {
-    '270M': { baseSpeed: 0.35, speedWith4bit: 0.30, memoryNoQuant: 4, memory4bit: 3 },
-    '600M': { baseSpeed: 0.65, speedWith4bit: 0.55, memoryNoQuant: 6, memory4bit: 4 },
-    '1B': { baseSpeed: 0.85, speedWith4bit: 0.70, memoryNoQuant: 9, memory4bit: 5 },
-    '1.5B': { baseSpeed: 1.15, speedWith4bit: 0.95, memoryNoQuant: 12, memory4bit: 7 },
-    '3B': { baseSpeed: 1.85, speedWith4bit: 1.50, memoryNoQuant: 20, memory4bit: 11 },
-    '4B': { baseSpeed: 2.35, speedWith4bit: 1.90, memoryNoQuant: 26, memory4bit: 14 },
-    '7B': { baseSpeed: 3.80, speedWith4bit: 3.10, memoryNoQuant: 45, memory4bit: 20 },
-    '8B': { baseSpeed: 4.20, speedWith4bit: 3.45, memoryNoQuant: 52, memory4bit: 22 }
+    '270M': { baseSpeed: 1.40, speedWith4bit: 1.20, memoryNoQuant: 4, memory4bit: 3 },
+    '600M': { baseSpeed: 2.60, speedWith4bit: 2.20, memoryNoQuant: 6, memory4bit: 4 },
+    '1B': { baseSpeed: 3.40, speedWith4bit: 2.80, memoryNoQuant: 9, memory4bit: 5 },
+    '1.5B': { baseSpeed: 4.60, speedWith4bit: 3.80, memoryNoQuant: 12, memory4bit: 7 },
+    '3B': { baseSpeed: 7.40, speedWith4bit: 6.00, memoryNoQuant: 20, memory4bit: 11 },
+    '4B': { baseSpeed: 9.40, speedWith4bit: 7.60, memoryNoQuant: 26, memory4bit: 14 },
+    '7B': { baseSpeed: 15.20, speedWith4bit: 12.40, memoryNoQuant: 45, memory4bit: 20 },
+    '8B': { baseSpeed: 16.80, speedWith4bit: 13.80, memoryNoQuant: 52, memory4bit: 22 }
 }
 
-function FineTuneSettings() {
+function FineTuneSettings({ config, setConfig }: FineTuneSettingsProps) {
     const { selectedModel } = useModelStore()
     const { data: trainingData = [], isLoading: isLoadingTrainingData } = useTrainingData()
 
     const [selectedPreset, setSelectedPreset] = useState<PresetKey>('quick');
-    const [config, setConfig] = useState<FineTuneConfig>({
-        epochs: 3,
-        learningRate: 5e-5,
-        loraRank: 8,
-        loraAlpha: 16,
-        loraDropout: 0.05,
-        batchSize: 4
-    });
 
     const trainingStats = useMemo(() => {
         const nonEmptyRows = trainingData.filter(
@@ -331,6 +328,37 @@ function FineTuneSettings() {
                                         </div>
                                     </div>
 
+                                    {/* Learning Rate */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                                            Learning Rate
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <HelpCircle className="size-3.5 cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent className="w-64">
+                                                    Controls how quickly the model adapts to your training data. Lower rates are safer but slower to learn, higher rates learn faster but risk instability. 2e-5 is recommended for most cases.
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </label>
+                                        <Select
+                                            value={config.learningRate.toString()}
+                                            onValueChange={(value) =>
+                                                setConfig({ ...config, learningRate: parseFloat(value) })
+                                            }
+                                        >
+                                            <SelectTrigger className="w-full shadow-none border-none focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] relative bg-blue-50 focus-visible:border-blue-200 hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border-none">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="border-none">
+                                                <SelectItem value="0.00001">1×10⁻⁵ - <div className="rounded-md bg-blue-200 text-xs px-2 py-1">Conservative</div></SelectItem>
+                                                <SelectItem value="0.00002">2×10⁻⁵ - <div className="rounded-md bg-green-200 text-xs px-2 py-1">Balanced</div></SelectItem>
+                                                <SelectItem value="0.00005">5×10⁻⁵ - <div className="rounded-md bg-yellow-200 text-xs px-2 py-1">Aggressive</div></SelectItem>
+                                                <SelectItem value="0.0001">1×10⁻⁴ - <div className="rounded-md bg-orange-200 text-xs px-2 py-1">Very aggressive</div></SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
                                     {/* LoRA Settings */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
@@ -355,10 +383,10 @@ function FineTuneSettings() {
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent className="border-none">
-                                                    <SelectItem value="8">8 - Light</SelectItem>
-                                                    <SelectItem value="16">16 - Balanced</SelectItem>
-                                                    <SelectItem value="32">32 - High capacity</SelectItem>
-                                                    <SelectItem value="64">64 - Maximum</SelectItem>
+                                                    <SelectItem value="8">8 - <div className="rounded-md bg-blue-200 text-xs px-2 py-1">Light</div></SelectItem>
+                                                    <SelectItem value="16">16 - <div className="rounded-md bg-green-200 text-xs px-2 py-1">Balanced</div></SelectItem>
+                                                    <SelectItem value="32">32 - <div className="rounded-md bg-yellow-200 text-xs px-2 py-1">High capacity</div></SelectItem>
+                                                    <SelectItem value="64">64 - <div className="rounded-md bg-orange-200 text-xs px-2 py-1">Maximum</div></SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -385,7 +413,7 @@ function FineTuneSettings() {
                                                 </SelectTrigger>
                                                 <SelectContent className="border-none">
                                                     <SelectItem value="16">16</SelectItem>
-                                                    <SelectItem value="32">32 - Recommended</SelectItem>
+                                                    <SelectItem value="32">32 - <div className="rounded-md bg-blue-200 text-xs px-2 py-1">Recommended</div></SelectItem>
                                                     <SelectItem value="64">64</SelectItem>
                                                 </SelectContent>
                                             </Select>
@@ -412,10 +440,10 @@ function FineTuneSettings() {
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent className="border-none">
-                                                    <SelectItem value="0">0.0 - No dropout</SelectItem>
-                                                    <SelectItem value="0.05">0.05 - Light</SelectItem>
-                                                    <SelectItem value="0.1">0.1 - Medium</SelectItem>
-                                                    <SelectItem value="0.2">0.2 - High</SelectItem>
+                                                    <SelectItem value="0">0.0 - <div className="rounded-md bg-blue-200 text-xs px-2 py-1">No dropout</div></SelectItem>
+                                                    <SelectItem value="0.05">0.05 - <div className="rounded-md bg-green-200 text-xs px-2 py-1">Light</div></SelectItem>
+                                                    <SelectItem value="0.1">0.1 - <div className="rounded-md bg-yellow-200 text-xs px-2 py-1">Medium</div></SelectItem>
+                                                    <SelectItem value="0.2">0.2 - <div className="rounded-md bg-orange-200 text-xs px-2 py-1">High</div></SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>

@@ -34,6 +34,15 @@ const fineTuneTabs = [
     { id: 'versions', label: 'Versions' },
 ]
 
+interface FineTuneConfig {
+    epochs: number;
+    learningRate: number;
+    loraRank: number;
+    loraAlpha: number;
+    loraDropout: number;
+    batchSize: number;
+}
+
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
@@ -43,6 +52,14 @@ function FineTune() {
     const [pendingCopy, setPendingCopy] = useState<boolean>(false)
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
     const [activeTab, setActiveTab] = useState<string>('fine-tune-jobs')
+    const [fineTuneConfig, setFineTuneConfig] = useState<FineTuneConfig>({
+        epochs: 3,
+        learningRate: 5e-5,
+        loraRank: 8,
+        loraAlpha: 16,
+        loraDropout: 0.05,
+        batchSize: 4
+    })
     const {
         selectedModel,
         getSelectedModelCompany,
@@ -241,6 +258,13 @@ function FineTune() {
                 modelName: selectedUserModel ? undefined : modelName,
                 modelId: selectedUserModel ? selectedUserModel.id : undefined,
                 baseModel: selectedModel.hf_id,
+                settings: {
+                    epochs: fineTuneConfig.epochs,
+                    learningRate: fineTuneConfig.learningRate,
+                    loraRank: fineTuneConfig.loraRank,
+                    loraAlpha: fineTuneConfig.loraAlpha,
+                    loraDropout: fineTuneConfig.loraDropout,
+                },
             },
             {
                 onSuccess: () => {
@@ -482,7 +506,7 @@ function FineTune() {
                                                 exit={{ opacity: 0, height: 0 }}
                                                 transition={{ duration: 0.3, ease: 'easeInOut' }}
                                             >
-                                                <FineTuneSettings />
+                                                <FineTuneSettings config={fineTuneConfig} setConfig={setFineTuneConfig} />
                                             </motion.div>
                                         )
                                     }
@@ -491,7 +515,7 @@ function FineTune() {
                                 {/* Start Button */}
                                 <div className="flex justify-end pt-2">
                                     {
-                                        isStarting ?
+                                        hasRunningJobs || hasQueuedJobs ?
                                             <Popover>
                                                 <PopoverTrigger asChild>
                                                     <Button

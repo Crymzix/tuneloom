@@ -198,12 +198,24 @@ export interface ModelApiKey {
 }
 
 /**
+ * Fine-tune settings
+ */
+export interface FineTuneSettings {
+    epochs?: number;
+    learningRate?: number;
+    loraRank?: number;
+    loraAlpha?: number;
+    loraDropout?: number;
+}
+
+/**
  * Request body for starting a fine-tune job
  */
 export interface StartFineTuneRequest {
     modelName?: string;
     modelId?: string;
     baseModel: string;
+    settings?: FineTuneSettings;
 }
 
 /**

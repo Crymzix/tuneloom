@@ -269,6 +269,13 @@ export class FineTuneController {
                     outputModelName: model.name,
                     trainingDataPath,
                     gcsBucket: bucket.name,
+
+                    // Include custom fine-tune settings if provided
+                    ...(body.settings?.epochs !== undefined && { numTrainEpochs: body.settings.epochs }),
+                    ...(body.settings?.learningRate !== undefined && { learningRate: body.settings.learningRate }),
+                    ...(body.settings?.loraRank !== undefined && { loraR: body.settings.loraRank }),
+                    ...(body.settings?.loraAlpha !== undefined && { loraAlpha: body.settings.loraAlpha }),
+                    ...(body.settings?.loraDropout !== undefined && { loraDropout: body.settings.loraDropout }),
                 };
 
                 const newJob: Omit<FineTuneJob, 'id'> = {

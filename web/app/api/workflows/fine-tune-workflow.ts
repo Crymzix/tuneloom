@@ -168,6 +168,32 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
     const projectId = await client.getProjectId()
     const name = `projects/${projectId}/locations/us-central1/jobs/finetune-job`;
 
+    const args = [
+        `--base-model=${config.baseModel}`,
+        `--output-model-name=${config.outputModelName}`,
+        `--training-data-path=${config.trainingDataPath}`,
+        `--gcs-bucket=${config.gcsBucket}`,
+        `--job-id=${jobId}`,
+        `--version-label=${params.modelVersionLabel}`,
+    ];
+
+    // Fine-tune settings
+    if (config.loraR !== undefined) {
+        args.push(`--lora-r=${config.loraR}`);
+    }
+    if (config.loraAlpha !== undefined) {
+        args.push(`--lora-alpha=${config.loraAlpha}`);
+    }
+    if (config.loraDropout !== undefined) {
+        args.push(`--lora-dropout=${config.loraDropout}`);
+    }
+    if (config.numTrainEpochs !== undefined) {
+        args.push(`--num-train-epochs=${config.numTrainEpochs}`);
+    }
+    if (config.learningRate !== undefined) {
+        args.push(`--learning-rate=${config.learningRate}`);
+    }
+
     try {
         // Execute the job
         const [execution] = await client.runJob({
@@ -175,14 +201,7 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
             overrides: {
                 containerOverrides: [
                     {
-                        args: [
-                            `--base-model=${config.baseModel}`,
-                            `--output-model-name=${config.outputModelName}`,
-                            `--training-data-path=${config.trainingDataPath}`,
-                            `--gcs-bucket=${config.gcsBucket}`,
-                            `--job-id=${jobId}`,
-                            `--version-label=${params.modelVersionLabel}`,
-                        ]
+                        args,
                     }
                 ]
             }
