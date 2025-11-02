@@ -19,8 +19,13 @@ import { UserModel } from "../../lib/fine-tune-jobs"
 function ChatInput() {
     const { user } = useAuth()
     const [chatInput, setChatInput] = useState("")
-    const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
-    const [selectedUserModel, setSelectedUserModel] = useState<UserModel | null>(null);
+    const {
+        selectedModel,
+        getSelectedModelCompany,
+        selectedUserModel,
+        setSelectedUserModel,
+        _hasHydrated
+    } = useModelStore();
     const { messages, setMessages, sendMessage, status, error } = useChat();
     const isLoading = status === 'streaming' || status === 'submitted';
 

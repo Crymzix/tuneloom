@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
-import { formatDate, interFont } from "../../lib/utils"
+import { useState, useMemo, useEffect } from 'react'
+import { interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -9,10 +9,8 @@ import {
     Play,
     Loader2,
     CheckCircle2,
-    Clock,
     AlertCircle,
     Copy,
-    BrainIcon,
     Eye,
     EyeOff,
     XCircle,
@@ -21,53 +19,37 @@ import {
 import { useModelStore } from '../../lib/store'
 import { useAuth } from '../../contexts/auth-context'
 import { AuthDialog } from '../auth-dialog'
-import { FineTuneJob as FirestoreFineTuneJob } from '../../lib/fine-tune-jobs'
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty'
-import { Skeleton } from '../ui/skeleton'
-import { Progress } from '../ui/progress'
-import { ScrollArea } from '../ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { useCheckModelName, useStartFineTune, useUserJobs, useUserModelsByBaseModel, useGetApiKey } from '../../hooks/use-fine-tune'
 import { useDebounce } from '../../hooks/use-debounce'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { AnimatePresence, motion } from 'motion/react'
 import { FineTuneSettings } from '../fine-tune-settings'
+import SlidingTabs from '../ui/sliding-tab'
+import { FineTuneJobs } from '../fine-tune-jobs'
+import { Versions } from '../versions'
 
-type JobStatus = 'running' | 'completed' | 'failed' | 'queued'
-
-interface FineTuneJob {
-    id: string
-    modelName: string
-    baseModel: string
-    status: JobStatus
-    progress: number
-    createdAt: string
-    completedAt?: string
-}
-
-// Convert Firestore job to component job format
-function convertFirestoreJob(firestoreJob: FirestoreFineTuneJob): FineTuneJob {
-    return {
-        id: firestoreJob.id,
-        modelName: firestoreJob.config.outputModelName,
-        baseModel: firestoreJob.config.baseModel,
-        status: firestoreJob.status,
-        progress: firestoreJob.progress,
-        createdAt: formatDate(firestoreJob.createdAt),
-        completedAt: firestoreJob.completedAt ? formatDate(firestoreJob.completedAt) : undefined,
-    }
-}
+const fineTuneTabs = [
+    { id: 'fine-tune-jobs', label: 'Fine-tune Jobs' },
+    { id: 'versions', label: 'Versions' },
+]
 
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
-    const [selectedUserModel, setSelectedUserModel] = useState<string>('')
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
     const [copiedApiKey, setCopiedApiKey] = useState<string | null>(null)
     const [showApiKey, setShowApiKey] = useState<boolean>(false)
     const [pendingCopy, setPendingCopy] = useState<boolean>(false)
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
-    const { selectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
+    const [activeTab, setActiveTab] = useState<string>('fine-tune-jobs')
+    const {
+        selectedModel,
+        getSelectedModelCompany,
+        selectedUserModel,
+        setSelectedUserModel,
+        _hasHydrated
+    } = useModelStore();
 
     const selectedModelCompany = getSelectedModelCompany()
     const debouncedModelName = useDebounce(modelName, 500)
@@ -76,13 +58,9 @@ function FineTune() {
         selectedModel?.hf_id || ''
     )
 
-    const userModel = useMemo(() => {
-        return userModels.find(model => model.id === selectedUserModel)
-    }, [userModels, selectedUserModel])
-
     const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
-        userModel?.apiKeyId,
-        showApiKey && !!userModel?.apiKeyId
+        selectedUserModel?.apiKeyId,
+        showApiKey && !!selectedUserModel?.apiKeyId
     )
 
     const startFineTuneMutation = useStartFineTune()
@@ -92,11 +70,7 @@ function FineTune() {
         error: modelNameCheckError,
     } = useCheckModelName(debouncedModelName, debouncedModelName.length > 0)
 
-    const { data: firestoreJobs = [], isLoading: loadingJobs } = useUserJobs()
-
-    const jobs = useMemo(() => {
-        return firestoreJobs.map(convertFirestoreJob)
-    }, [firestoreJobs])
+    const { data: jobs = [], isLoading: loadingJobs } = useUserJobs()
 
     const hasQueuedJobs = useMemo(() => {
         return jobs.some(job => job.status === 'queued')
@@ -181,11 +155,11 @@ function FineTune() {
     useEffect(() => {
         if (pendingCopy && apiKeyData?.keySecret && !isFetchingApiKey) {
             navigator.clipboard.writeText(apiKeyData.keySecret)
-            setCopiedApiKey(userModel?.id || null)
+            setCopiedApiKey(selectedUserModel?.id || null)
             setTimeout(() => setCopiedApiKey(null), 2000)
             setPendingCopy(false)
         }
-    }, [pendingCopy, apiKeyData, isFetchingApiKey, userModel?.id])
+    }, [pendingCopy, apiKeyData, isFetchingApiKey, selectedUserModel?.id])
 
     const handleCopyUrl = (url: string) => {
         navigator.clipboard.writeText(url)
@@ -194,13 +168,13 @@ function FineTune() {
     }
 
     const handleCopyApiKey = async () => {
-        if (!userModel?.apiKeyId) {
+        if (!selectedUserModel?.apiKeyId) {
             return
         }
 
         if (apiKeyData?.keySecret) {
             navigator.clipboard.writeText(apiKeyData.keySecret)
-            setCopiedApiKey(userModel.id)
+            setCopiedApiKey(selectedUserModel.id)
             setTimeout(() => setCopiedApiKey(null), 2000)
         } else {
             setPendingCopy(true)
@@ -220,7 +194,7 @@ function FineTune() {
     }
 
     const getApiKeyDisplay = () => {
-        if (!userModel?.apiKeyId) return ''
+        if (!selectedUserModel?.apiKeyId) return ''
 
         if (showApiKey) {
             if (isFetchingApiKey) {
@@ -232,7 +206,7 @@ function FineTune() {
             return 'Failed to load'
         }
 
-        return maskApiKey(userModel.apiKeyId)
+        return maskApiKey(selectedUserModel.apiKeyId)
     }
 
     const canStartFineTune = () => {
@@ -265,7 +239,7 @@ function FineTune() {
         startFineTuneMutation.mutate(
             {
                 modelName: selectedUserModel ? undefined : modelName,
-                modelId: selectedUserModel ? selectedUserModel : undefined,
+                modelId: selectedUserModel ? selectedUserModel.id : undefined,
                 baseModel: selectedModel.hf_id,
             },
             {
@@ -274,33 +248,6 @@ function FineTune() {
                 },
             }
         );
-    }
-
-    const getStatusIcon = (status: JobStatus) => {
-        switch (status) {
-            case 'completed':
-                return <CheckCircle2 className="size-4 text-green-600" />
-            case 'running':
-                return <Loader2 className="size-4 text-blue-600 animate-spin" />
-            case 'failed':
-                return <AlertCircle className="size-4 text-red-600" />
-            case 'queued':
-                return <Clock className="size-4 text-gray-500" />
-        }
-    }
-
-    const getStatusBadge = (status: JobStatus) => {
-        const baseClasses = "text-xs font-medium px-2 py-1 rounded-md"
-        switch (status) {
-            case 'completed':
-                return <span className={`${baseClasses} bg-green-100 text-green-700`}>Completed</span>
-            case 'running':
-                return <span className={`${baseClasses} bg-blue-100 text-blue-700`}>Running</span>
-            case 'failed':
-                return <span className={`${baseClasses} bg-red-100 text-red-700`}>Failed</span>
-            case 'queued':
-                return <span className={`${baseClasses} bg-gray-100 text-gray-700`}>Queued</span>
-        }
     }
 
     return (
@@ -382,7 +329,17 @@ function FineTune() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium">Select a Model</label>
                                             <div className='flex gap-2 items-center'>
-                                                <Select value={selectedUserModel} onValueChange={setSelectedUserModel}>
+                                                <Select
+                                                    value={selectedUserModel?.id || ''}
+                                                    onValueChange={(value) => {
+                                                        const model = userModels.find(m => m.id === value)
+                                                        if (model) {
+                                                            setSelectedUserModel(model);
+                                                        } else {
+                                                            setSelectedUserModel(null);
+                                                        }
+                                                    }}
+                                                >
                                                     <SelectTrigger className="min-w-52 shadow-none border-none focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] relative bg-blue-50 focus-visible:border-blue-200 hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border-none">
                                                         <SelectValue placeholder="Select your model" />
                                                     </SelectTrigger>
@@ -399,7 +356,7 @@ function FineTune() {
                                                         <Button
                                                             variant="secondary"
                                                             size='icon-sm'
-                                                            onClick={() => setSelectedUserModel('')}
+                                                            onClick={() => setSelectedUserModel(null)}
                                                         >
                                                             <XIcon />
                                                         </Button>
@@ -412,7 +369,7 @@ function FineTune() {
                                         </div>
                                         {/* Model URL and API Key */}
                                         <AnimatePresence>
-                                            {userModel?.inferenceUrl && (
+                                            {selectedUserModel?.inferenceUrl && (
                                                 <motion.div
                                                     initial={{ opacity: 0, height: 0 }}
                                                     animate={{ opacity: 1, height: 'auto' }}
@@ -427,7 +384,7 @@ function FineTune() {
                                                         </p>
                                                         <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
                                                             <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                {userModel?.inferenceUrl}
+                                                                {selectedUserModel?.inferenceUrl}
                                                             </code>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
@@ -435,9 +392,9 @@ function FineTune() {
                                                                         variant="ghost"
                                                                         size="icon-sm"
                                                                         className="size-7 hover:bg-slate-700"
-                                                                        onClick={() => handleCopyUrl(userModel?.inferenceUrl || '')}
+                                                                        onClick={() => handleCopyUrl(selectedUserModel?.inferenceUrl || '')}
                                                                     >
-                                                                        {copiedUrl === userModel?.inferenceUrl ? (
+                                                                        {copiedUrl === selectedUserModel?.inferenceUrl ? (
                                                                             <CheckCircle2 className="size-3 text-green-400" />
                                                                         ) : (
                                                                             <Copy className="size-3 text-slate-300" />
@@ -445,14 +402,14 @@ function FineTune() {
                                                                     </Button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="bottom">
-                                                                    {copiedUrl === userModel?.inferenceUrl ? 'Copied!' : 'Copy URL'}
+                                                                    {copiedUrl === selectedUserModel?.inferenceUrl ? 'Copied!' : 'Copy URL'}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </div>
                                                     </div>
 
                                                     {/* API Key */}
-                                                    {userModel?.apiKeyId && (
+                                                    {selectedUserModel?.apiKeyId && (
                                                         <div className="space-y-2">
                                                             <p className="text-xs font-medium text-muted-foreground">
                                                                 API Key
@@ -491,7 +448,7 @@ function FineTune() {
                                                                                 onClick={() => handleCopyApiKey()}
                                                                                 disabled={isFetchingApiKey}
                                                                             >
-                                                                                {copiedApiKey === userModel?.id ? (
+                                                                                {copiedApiKey === selectedUserModel?.id ? (
                                                                                     <CheckCircle2 className="size-3 text-green-400" />
                                                                                 ) : (
                                                                                     <Copy className="size-3 text-slate-300" />
@@ -499,7 +456,7 @@ function FineTune() {
                                                                             </Button>
                                                                         </TooltipTrigger>
                                                                         <TooltipContent side="bottom">
-                                                                            {copiedApiKey === userModel?.id ? 'Copied!' : 'Copy API key'}
+                                                                            {copiedApiKey === selectedUserModel?.id ? 'Copied!' : 'Copy API key'}
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </div>
@@ -518,7 +475,7 @@ function FineTune() {
 
                                 <AnimatePresence>
                                     {
-                                        (userModel || modelName) && (
+                                        (selectedUserModel || modelName) && (
                                             <motion.div
                                                 initial={{ opacity: 0, height: 0 }}
                                                 animate={{ opacity: 1, height: 'auto' }}
@@ -541,6 +498,15 @@ function FineTune() {
                                                         size="sm"
                                                         className='bg-green-500 text-white hover:bg-green-400 border-none'
                                                     >
+                                                        <div
+                                                            className='animate-aurora absolute -z-10 bg-[length:200%_auto] w-64 h-24'
+                                                            style={{
+                                                                backgroundImage: `linear-gradient(135deg, ${["#9500ffff", "#4e28caff", "#0070F3", "#38bdf8"].join(", ")}, ${"#FF0080"
+                                                                    })`,
+                                                                animationDuration: `10s`,
+                                                            }}
+                                                        >
+                                                        </div>
                                                         <Loader2 className="size-4 animate-spin" />
                                                         {
                                                             hasRunningJobs ? 'Fine-tune in progress...' : (
@@ -560,7 +526,7 @@ function FineTune() {
                                             </Popover> :
                                             <Button
                                                 size="sm"
-                                                className='bg-green-500 text-white hover:bg-green-400 border-none'
+                                                className='bg-green-500 relative text-white hover:bg-green-400 border-none overflow-hidden'
                                                 onClick={handleStartFineTune}
                                                 disabled={!canStartFineTune() || isStarting}
                                             >
@@ -574,102 +540,14 @@ function FineTune() {
 
                         <div className="rounded-lg bg-background shadow-sm overflow-hidden">
                             <div className="p-6 border-b flex items-center justify-between">
-                                <div className="flex gap-2">
-                                    <h3 className="text-lg font-semibold">Your Fine-tune Jobs</h3>
-                                </div>
+                                <SlidingTabs
+                                    tabs={fineTuneTabs}
+                                    activeTab={activeTab}
+                                    onTabChange={setActiveTab}
+                                />
                             </div>
-
-                            {/* Jobs List */}
-                            <ScrollArea className="h-[calc(100vh-274px)]">
-                                <div className="space-y-0">
-                                    {jobs.map((job, index) => (
-                                        <div
-                                            key={job.id}
-                                            className={`p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === jobs.length - 1 ? '' : ''
-                                                }`}
-                                        >
-                                            <div className="flex items-start justify-between gap-4">
-                                                {/* Left side - Job info */}
-                                                <div className="flex-1 space-y-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div>
-                                                            <h4 className="font-semibold text-sm">
-                                                                {job.modelName}
-                                                            </h4>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Based on {job.baseModel}
-                                                            </p>
-                                                        </div>
-                                                        <div className='flex items-center gap-2 ml-auto'>
-                                                            {getStatusIcon(job.status)}
-                                                            {getStatusBadge(job.status)}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Progress bar for running jobs */}
-                                                    {job.status === 'running' && (
-                                                        <div className="space-y-1">
-                                                            <Progress value={job.progress * 100} />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {Math.round(job.progress * 100)}% complete
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex gap-4 text-xs text-muted-foreground">
-                                                        <span>Started: {job.createdAt}</span>
-                                                        {job.completedAt && (
-                                                            <span>Completed: {job.completedAt}</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    {/* Loading state */}
-                                    {loadingJobs && (
-                                        <>
-                                            {[1, 2, 3].map((i) => (
-                                                <div key={i} className="p-6 border-t first:border-none">
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="flex-1 space-y-3">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="space-y-2">
-                                                                    <Skeleton className="h-4 w-32" />
-                                                                    <Skeleton className="h-3 w-48" />
-                                                                </div>
-                                                                <div className="flex items-center gap-2 ml-auto">
-                                                                    <Skeleton className="h-4 w-4 rounded-full" />
-                                                                    <Skeleton className="h-6 w-20 rounded-md" />
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-4">
-                                                                <Skeleton className="h-3 w-40" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </>
-                                    )}
-
-                                    {/* Empty state */}
-                                    {!loadingJobs && jobs.length === 0 && (
-                                        <Empty>
-                                            <EmptyHeader>
-                                                <EmptyMedia variant="icon">
-                                                    <BrainIcon />
-                                                </EmptyMedia>
-                                                <EmptyTitle>No fine-tune jobs yet</EmptyTitle>
-                                                <EmptyDescription>
-                                                    Start your first fine-tuning job above to create a custom model trained on your data
-                                                </EmptyDescription>
-                                            </EmptyHeader>
-                                        </Empty>
-                                    )}
-                                </div>
-                            </ScrollArea>
+                            {activeTab === 'fine-tune-jobs' && <FineTuneJobs />}
+                            {activeTab === 'versions' && <Versions modelId={selectedUserModel?.id} />}
                         </div>
                     </div>
                 </div>

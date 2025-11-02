@@ -14,12 +14,18 @@ function ModelSelector({
     onBaseModelChange?: (modelId: string) => void;
     onModelChange?: (model: UserModel | null) => void;
 }) {
-    const { selectedModel, setSelectedModel, getSelectedModelCompany, _hasHydrated } = useModelStore();
+    const {
+        selectedModel,
+        setSelectedModel,
+        getSelectedModelCompany,
+        _hasHydrated,
+        selectedUserModel,
+        setSelectedUserModel
+    } = useModelStore();
     const selectedModelCompany = getSelectedModelCompany()
     const { data: userModels = [], isLoading: isLoadingUserModels } = useUserModelsByBaseModel(
         selectedModel?.hf_id || ''
     )
-    const [selectedUserModel, setSelectedUserModel] = useState<UserModel | null>(null);
 
     return (
         <div className="flex items-center gap-2">

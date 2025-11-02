@@ -11,11 +11,17 @@ import {
     Unsubscribe,
     Timestamp,
 } from 'firebase/firestore';
+import { convertFirestoreTimestamps } from './utils';
 
 /**
  * Fine-tune job status types
  */
 export type FineTuneJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+/**
+ * Model version status types
+ */
+export type ModelVersionStatus = 'building' | 'ready' | 'failed';
 
 /**
  * Fine-tune job interface matching Firestore document
@@ -24,7 +30,6 @@ export interface FineTuneJob {
     id: string;
     userId: string;
     modelId: string;
-    modelName: string;
     config: {
         baseModel: string;
         outputModelName: string;
@@ -41,42 +46,6 @@ export interface FineTuneJob {
     failedAt?: Date;
     error?: string;
     cloudRunJobName?: string;
-}
-
-/**
- * Convert Firestore timestamp to Date
- */
-function convertTimestamp(timestamp: any): Date {
-    if (timestamp instanceof Timestamp) {
-        return timestamp.toDate();
-    }
-    if (timestamp?.toDate) {
-        return timestamp.toDate();
-    }
-    return timestamp;
-}
-
-/**
- * Convert Firestore document to FineTuneJob
- */
-function docToJob(doc: any): FineTuneJob {
-    const data = doc.data();
-    return {
-        id: doc.id,
-        userId: data.userId,
-        modelId: data.modelId,
-        modelName: data.modelName,
-        config: data.config,
-        status: data.status,
-        progress: data.progress || 0,
-        createdAt: convertTimestamp(data.createdAt),
-        updatedAt: convertTimestamp(data.updatedAt),
-        startedAt: data.startedAt ? convertTimestamp(data.startedAt) : undefined,
-        completedAt: data.completedAt ? convertTimestamp(data.completedAt) : undefined,
-        failedAt: data.failedAt ? convertTimestamp(data.failedAt) : undefined,
-        error: data.error,
-        cloudRunJobName: data.cloudRunJobName,
-    };
 }
 
 /**
@@ -102,21 +71,39 @@ function docToJob(doc: any): FineTuneJob {
  * ```
  */
 export function subscribeToUserJobs(
-    userId: string,
+    {
+        userId,
+        modelName,
+    }: {
+        userId: string;
+        modelName?: string;
+    },
     onUpdate: (jobs: FineTuneJob[]) => void,
     onError?: (error: Error) => void
 ): Unsubscribe {
     const jobsRef = collection(firestore, 'fine-tune-jobs');
-    const q = query(
+    let q = query(
         jobsRef,
         where('userId', '==', userId),
         orderBy('createdAt', 'desc')
     );
+    if (modelName) {
+        q = query(
+            jobsRef,
+            where('userId', '==', userId),
+            where('config.outputModelName', '==', modelName),
+            orderBy('createdAt', 'desc')
+        );
+    }
 
     return onSnapshot(
         q,
         (snapshot) => {
-            const jobs = snapshot.docs.map(docToJob);
+            const jobs = snapshot.docs.map(doc => {
+                const fineTuneJob = convertFirestoreTimestamps(doc.data()) as FineTuneJob;
+                fineTuneJob.id = doc.id;
+                return fineTuneJob;
+            });
             onUpdate(jobs);
         },
         (error) => {
@@ -148,7 +135,9 @@ export async function getUserJobs(userId: string): Promise<FineTuneJob[]> {
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(docToJob);
+    return snapshot.docs.map(doc => {
+        return convertFirestoreTimestamps(doc.data()) as FineTuneJob
+    });
 }
 
 /**
@@ -170,7 +159,7 @@ export async function getJobById(jobId: string): Promise<FineTuneJob | null> {
         return null;
     }
 
-    return docToJob(jobDoc);
+    return convertFirestoreTimestamps(jobDoc.data()) as FineTuneJob;
 }
 
 /**
@@ -198,7 +187,7 @@ export function subscribeToJob(
         jobRef,
         (doc) => {
             if (doc.exists()) {
-                onUpdate(docToJob(doc));
+                onUpdate(convertFirestoreTimestamps(doc.data()) as FineTuneJob);
             } else {
                 onUpdate(null);
             }
@@ -229,25 +218,11 @@ export interface UserModel {
     };
     apiKeyId?: string;
     inferenceUrl?: string;
-}
 
-/**
- * Convert Firestore document to UserModel
- */
-function docToUserModel(doc: any): UserModel {
-    const data = doc.data();
-    return {
-        id: doc.id,
-        userId: data.userId,
-        name: data.name,
-        baseModel: data.baseModel,
-        status: data.status,
-        createdAt: convertTimestamp(data.createdAt),
-        updatedAt: convertTimestamp(data.updatedAt),
-        metadata: data.metadata,
-        apiKeyId: data.apiKeyId,
-        inferenceUrl: data.inferenceUrl,
-    };
+    // Version tracking
+    activeVersionId: string | null; // Currently deployed version
+    latestVersionId: string | null; // Most recently created version
+    versionCount: number; // Total number of versions
 }
 
 /**
@@ -301,7 +276,11 @@ export function subscribeToUserModelsByBaseModel(
     return onSnapshot(
         q,
         (snapshot) => {
-            const models = snapshot.docs.map(docToUserModel);
+            const models = snapshot.docs.map(doc => {
+                const userModel = convertFirestoreTimestamps(doc.data()) as UserModel;
+                userModel.id = doc.id;
+                return userModel;
+            });
             onUpdate(models);
         },
         (error) => {
@@ -343,5 +322,111 @@ export async function getUserModelsByBaseModel(
     );
 
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(docToUserModel);
+    return snapshot.docs.map(doc => {
+        return convertFirestoreTimestamps(doc.data()) as UserModel;
+    });
+}
+
+/**
+ * Model version interface matching Firestore document in subcollection
+ */
+export interface ModelVersion {
+    id: string;
+    modelId: string;
+    modelName: string;
+    userId: string;
+    versionNumber: number;
+    versionLabel: string;
+    fineTuneJobId: string;
+    adapterPath: string;
+    status: ModelVersionStatus;
+    baseModel: string;
+    config: {
+        baseModel: string;
+        outputModelName: string;
+        trainingDataPath: string;
+        gcsBucket: string;
+        [key: string]: any;
+    };
+    metrics?: {
+        finalLoss?: number;
+        evalLoss?: number;
+        trainRuntime?: number;
+        trainSamplesPerSecond?: number;
+        [key: string]: unknown;
+    };
+    createdAt: Date;
+    updatedAt: Date;
+    readyAt?: Date;
+    failedAt?: Date;
+}
+
+/**
+ * Subscribe to real-time updates for model versions
+ *
+ * @param modelId - The model ID
+ * @param onUpdate - Callback function called when versions are updated
+ * @param onError - Optional error handler
+ * @returns Unsubscribe function to stop listening
+ *
+ * @example
+ * ```tsx
+ * const unsubscribe = subscribeToModelVersions(
+ *   modelId,
+ *   (versions) => {
+ *     setVersions(versions);
+ *   }
+ * );
+ *
+ * return () => unsubscribe();
+ * ```
+ */
+export function subscribeToModelVersions(
+    modelId: string,
+    onUpdate: (versions: ModelVersion[]) => void,
+    onError?: (error: Error) => void
+): Unsubscribe {
+    const versionsRef = collection(firestore, 'models', modelId, 'versions');
+    const q = query(versionsRef, orderBy('versionNumber', 'desc'));
+
+    return onSnapshot(
+        q,
+        (snapshot) => {
+            const versions = snapshot.docs.map(doc => {
+                const version = convertFirestoreTimestamps(doc.data()) as ModelVersion;
+                version.id = doc.id;
+                return version;
+            });
+            onUpdate(versions);
+        },
+        (error) => {
+            console.error('Error subscribing to model versions:', error);
+            if (onError) {
+                onError(error);
+            }
+        }
+    );
+}
+
+/**
+ * Get all versions for a model (one-time fetch)
+ *
+ * @param modelId - The model ID
+ * @returns Array of model versions
+ *
+ * @example
+ * ```tsx
+ * const versions = await getModelVersions(modelId);
+ * ```
+ */
+export async function getModelVersions(modelId: string): Promise<ModelVersion[]> {
+    const versionsRef = collection(firestore, 'models', modelId, 'versions');
+    const q = query(versionsRef, orderBy('versionNumber', 'desc'));
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const version = convertFirestoreTimestamps(doc.data()) as ModelVersion;
+        version.id = doc.id;
+        return version;
+    });
 }

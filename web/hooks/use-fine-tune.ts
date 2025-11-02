@@ -6,9 +6,12 @@ import {
     subscribeToUserJobs,
     subscribeToUserModelsByBaseModel,
     getUserModelsByBaseModel,
+    subscribeToModelVersions,
     FineTuneJob as FirestoreFineTuneJob,
-    UserModel
+    UserModel,
+    ModelVersion,
 } from '@/lib/fine-tune-jobs'
+import { useModelStore } from '../lib/store'
 
 interface CheckModelNameResponse {
     available: boolean
@@ -44,13 +47,17 @@ interface GetApiKeyResponse {
 /**
  * Hook to fetch user's fine-tune jobs with real-time updates
  */
-export function useUserJobs() {
+export function useUserJobs({
+    selectedUserModelName
+}: {
+    selectedUserModelName?: string
+} = {}) {
     const { user } = useAuth()
     const queryClient = useQueryClient()
     const [hasReceivedFirstUpdate, setHasReceivedFirstUpdate] = useState(false)
 
     const query = useQuery({
-        queryKey: ['fine-tune-jobs', user?.uid],
+        queryKey: ['fine-tune-jobs', user?.uid, selectedUserModelName],
         queryFn: async () => {
             return [] as FirestoreFineTuneJob[]
         },
@@ -60,7 +67,7 @@ export function useUserJobs() {
 
     useEffect(() => {
         if (!user || user.isAnonymous) {
-            queryClient.setQueryData(['fine-tune-jobs', user?.uid], [])
+            queryClient.setQueryData(['fine-tune-jobs', user?.uid, selectedUserModelName], [])
             setHasReceivedFirstUpdate(false)
             return
         }
@@ -69,9 +76,12 @@ export function useUserJobs() {
         setHasReceivedFirstUpdate(false)
 
         const unsubscribe = subscribeToUserJobs(
-            user.uid,
-            (firestoreJobs) => {
-                queryClient.setQueryData(['fine-tune-jobs', user.uid], firestoreJobs)
+            {
+                userId: user.uid,
+                modelName: selectedUserModelName,
+            },
+            (jobs) => {
+                queryClient.setQueryData(['fine-tune-jobs', user.uid, selectedUserModelName], jobs)
                 setHasReceivedFirstUpdate(true)
             },
             (error) => {
@@ -81,7 +91,7 @@ export function useUserJobs() {
         )
 
         return () => unsubscribe()
-    }, [user, queryClient])
+    }, [user, selectedUserModelName, queryClient])
 
     return {
         ...query,
@@ -133,6 +143,7 @@ export function useUserModelsByBaseModel(baseModel: string) {
     const { user } = useAuth()
     const queryClient = useQueryClient()
     const [hasReceivedFirstUpdate, setHasReceivedFirstUpdate] = useState(false)
+    const { selectedUserModel, setSelectedUserModel } = useModelStore()
 
     const query = useQuery({
         queryKey: ['user-models-by-base', user?.uid, baseModel],
@@ -158,6 +169,10 @@ export function useUserModelsByBaseModel(baseModel: string) {
             baseModel,
             (userModels) => {
                 queryClient.setQueryData(['user-models-by-base', user.uid, baseModel], userModels)
+                const updatedSelectedUserModel = userModels.find(model => model.id === selectedUserModel?.id) || null
+                if (updatedSelectedUserModel) {
+                    setSelectedUserModel(updatedSelectedUserModel)
+                }
                 setHasReceivedFirstUpdate(true)
             },
             (error) => {
@@ -285,4 +300,52 @@ export function useStartFineTune() {
             })
         },
     })
+}
+
+/**
+ * Hook to fetch model versions with real-time updates
+ */
+export function useModelVersions(modelId: string | undefined) {
+    const { user } = useAuth()
+    const queryClient = useQueryClient()
+    const [hasReceivedFirstUpdate, setHasReceivedFirstUpdate] = useState(false)
+
+    const query = useQuery({
+        queryKey: ['model-versions', modelId],
+        queryFn: async () => {
+            return [] as ModelVersion[]
+        },
+        enabled: !!user && !user.isAnonymous && !!modelId,
+        staleTime: Infinity,
+    })
+
+    useEffect(() => {
+        if (!user || user.isAnonymous || !modelId) {
+            queryClient.setQueryData(['model-versions', modelId], [])
+            setHasReceivedFirstUpdate(false)
+            return
+        }
+
+        // Reset the flag when modelId changes
+        setHasReceivedFirstUpdate(false)
+
+        const unsubscribe = subscribeToModelVersions(
+            modelId,
+            (versions) => {
+                queryClient.setQueryData(['model-versions', modelId], versions)
+                setHasReceivedFirstUpdate(true)
+            },
+            (error) => {
+                console.error('Error loading model versions:', error)
+                setHasReceivedFirstUpdate(true)
+            }
+        )
+
+        return () => unsubscribe()
+    }, [user, modelId, queryClient])
+
+    return {
+        ...query,
+        isLoading: modelId ? (query.isLoading || !hasReceivedFirstUpdate) : false,
+    }
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { modelGroups } from '../models';
+import { UserModel } from '../fine-tune-jobs';
 
 export interface Model {
     name: string;
@@ -20,6 +21,8 @@ interface ModelStore {
     selectedModel: Model;
     setSelectedModel: (model: Model) => void;
     getSelectedModelCompany: () => ModelGroup;
+    selectedUserModel: UserModel | null;
+    setSelectedUserModel: (model: UserModel | null) => void;
     _hasHydrated: boolean;
     setHasHydrated: (state: boolean) => void;
 }
@@ -27,8 +30,8 @@ interface ModelStore {
 export const useModelStore = create<ModelStore>()(
     persist(
         (set, get) => ({
-            selectedModel: modelGroups[0].models[0],
             _hasHydrated: false,
+            selectedModel: modelGroups[0].models[0],
 
             setSelectedModel: (model: Model) => set({ selectedModel: model }),
 
@@ -38,6 +41,9 @@ export const useModelStore = create<ModelStore>()(
                     group.models.some(m => m.hf_id === selectedModel.hf_id)
                 ) || modelGroups[0]
             },
+
+            selectedUserModel: null,
+            setSelectedUserModel: (model: UserModel | null) => set({ selectedUserModel: model }),
 
             setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
         }),
