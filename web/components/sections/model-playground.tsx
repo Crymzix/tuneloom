@@ -4,7 +4,7 @@ import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { ArrowDownIcon, InfoIcon, Loader2Icon, RotateCcwIcon, SendIcon, Settings2Icon, TrashIcon, User2Icon, XCircleIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { useChat } from '@ai-sdk/react';
+import { useChat, useCompletion } from '@ai-sdk/react';
 import { motion, AnimatePresence } from "motion/react";
 import { ScrollArea } from "../ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
@@ -35,9 +35,10 @@ const DEFAULT_MODEL_SETTINGS = {
     presencePenalty: 0,
 }
 
-function ChatInput() {
+function ModelPlayground() {
     const { user } = useAuth()
     const [chatInput, setChatInput] = useState("")
+    const [completionInput, setCompletionInput] = useState("")
     const {
         selectedModel,
         getSelectedModelCompany,
@@ -45,13 +46,16 @@ function ChatInput() {
         setSelectedUserModel,
         _hasHydrated
     } = useModelStore();
-    const { messages, setMessages, sendMessage, status, error } = useChat();
-    const isLoading = status === 'streaming' || status === 'submitted';
+    const { messages, setMessages, sendMessage, status: chatStatus, error: chatError } = useChat();
+    const { completion, complete, setCompletion, isLoading: isCompleting, error: completionError } = useCompletion();
+    const isLoading = chatStatus === 'streaming' || chatStatus === 'submitted' || isCompleting;
 
     const [isAtBottom, setIsAtBottom] = useState(true);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [activeTab, setActiveTab] = useState<string>('chat')
     const scrollViewportRef = useRef<HTMLDivElement>(null);
+    const chatInputRef = useRef<HTMLDivElement>(null);
+    const [chatInputHeight, setChatInputHeight] = useState(0);
     const { executeRecaptcha } = useRecaptcha();
 
     const [temperature, setTemperature] = useState(DEFAULT_MODEL_SETTINGS.temperature);
@@ -77,16 +81,44 @@ function ChatInput() {
         !!selectedUserModel?.apiKeyId
     )
 
+    useEffect(() => {
+        if (isAtBottom && messages.length > 0) {
+            setTimeout(() => {
+                scrollToBottom();
+            }, 100);
+        }
+    }, [messages, isAtBottom]);
+
+    useEffect(() => {
+        const chatInputElement = chatInputRef.current;
+        if (!chatInputElement) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                setChatInputHeight(entry.contentRect.height);
+            }
+        });
+
+        resizeObserver.observe(chatInputElement);
+
+        // Set initial height
+        setChatInputHeight(chatInputElement.offsetHeight);
+
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, []);
+
     const handleSendMessage = async () => {
+        if (isLoading) {
+            return;
+        }
+
         const recaptchaToken = await executeRecaptcha();
         if (!recaptchaToken) {
             toast.error('reCAPTCHA verification failed', {
                 description: 'Please try again.'
             });
-            return;
-        }
-
-        if (isLoading) {
             return;
         }
 
@@ -101,6 +133,26 @@ function ChatInput() {
             presencePenalty,
         };
 
+        if (activeTab === 'chat') {
+            chatPrompt(recaptchaToken, token, modelSettings)
+            setChatInput('');
+        } else {
+            completePrompt(recaptchaToken, token, modelSettings)
+        }
+    }
+
+    const chatPrompt = (
+        recaptchaToken: string,
+        token: string | undefined,
+        modelSettings: {
+            temperature: number,
+            topP: number,
+            topK: number,
+            maxTokens: number,
+            frequencyPenalty: number,
+            presencePenalty: number,
+        }
+    ) => {
         if (selectedUserModel) {
             sendMessage({
                 text: chatInput,
@@ -129,7 +181,44 @@ function ChatInput() {
                 }
             });
         }
-        setChatInput('');
+    }
+
+    const completePrompt = async (
+        recaptchaToken: string,
+        token: string | undefined,
+        modelSettings: {
+            temperature: number,
+            topP: number,
+            topK: number,
+            maxTokens: number,
+            frequencyPenalty: number,
+            presencePenalty: number,
+        }
+    ) => {
+        if (selectedUserModel) {
+            complete(completionInput, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: {
+                    modelId: selectedUserModel.name,
+                    apiKey: apiKeyData?.keySecret || '',
+                    recaptchaToken,
+                    settings: modelSettings,
+                }
+            })
+        } else {
+            complete(completionInput, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: {
+                    modelId: selectedModel.hf_id,
+                    recaptchaToken,
+                    settings: modelSettings,
+                }
+            })
+        }
     }
 
     const handleScrollChange = ({ scrollTop, scrollHeight, clientHeight }: {
@@ -153,18 +242,19 @@ function ChatInput() {
         }
     };
 
-    useEffect(() => {
-        if (isAtBottom && messages.length > 0) {
-            setTimeout(() => {
-                scrollToBottom();
-            }, 100);
+    const onClear = () => {
+        if (activeTab === 'chat') {
+            setMessages([]);
+        } else {
+            setCompletionInput('');
+            setCompletion('');
         }
-    }, [messages, isAtBottom]);
+    }
 
     const hasMessages = messages.length > 0;
 
     return (
-        <div id="chat-input" className="h-screen w-screen flex flex-col relative">
+        <div id="model-playground" className="h-screen w-screen flex flex-col relative">
             <div className="absolute top-0 left-0 right-0 z-30">
                 <div className={`${interFont.className} px-6 py-4 flex items-center gap-2`}>
                     <h2 className="text-2xl font-semibold">Fine-tune</h2>
@@ -181,27 +271,30 @@ function ChatInput() {
 
             {/* Messages container */}
             <AnimatePresence>
-                {hasMessages && (
+                {hasMessages && activeTab === "chat" && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: "easeOut" }}
-                        className="flex-1 relative"
+                        className="flex-1 relative w-xl mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm mt-16 shadow-xs"
+                        style={{ maxHeight: chatInputHeight > 0 ? `calc(100vh - ${chatInputHeight + 96}px)` : '100vh' }}
                     >
-                        <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
                         <ScrollArea
-                            className="h-screen sm:w-1/2 mx-auto"
+                            className="h-full mx-auto"
                             viewportRef={scrollViewportRef}
                             onScrollChange={handleScrollChange}
+                            fadingEdges={true}
+                            fadingEdgeClassNameTop="h-16 bg-gradient-to-b from-blue-100 to-transparent"
+                            fadingEdgeClassNameBottom="h-16 bg-gradient-to-t from-blue-100 to-transparent"
                         >
-                            <div className="flex flex-col w-full max-w-3xl pt-8 pb-45 px-4 mx-auto gap-4">
+                            <div className="flex flex-col w-full max-w-3xl pt-8 pb-8 px-4 mx-auto gap-4">
                                 {messages.map((message, index) => (
                                     <motion.div
                                         key={message.id}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ duration: 0.3, delay: index * 0.1 }}
-                                        className={`flex gap-3 first:mt-8 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                                        className={`flex gap-3 first:mt-8 last:mb-8 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                                     >
                                         {/* Avatar */}
                                         {
@@ -248,7 +341,7 @@ function ChatInput() {
                                     )
                                 }
                                 {
-                                    error && (
+                                    chatError && (
                                         <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
@@ -258,7 +351,7 @@ function ChatInput() {
                                                 <XCircleIcon className="size-4 flex-shrink-0" />
                                                 <div className="flex flex-col gap-1">
                                                     <p className="font-medium text-xs">Error occurred</p>
-                                                    <p className="text-xs">{error.message}</p>
+                                                    <p className="text-xs">{chatError.message}</p>
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -275,7 +368,7 @@ function ChatInput() {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: 10 }}
                                     transition={{ duration: 0.2 }}
-                                    className="absolute bottom-45 left-1/2 -translate-x-1/2 z-20"
+                                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20"
                                 >
                                     <Button
                                         size="sm"
@@ -291,13 +384,79 @@ function ChatInput() {
                     </motion.div>
                 )}
             </AnimatePresence>
-            <div className="absolute bottom-0 left-0 -z-10 right-0 h-32 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
 
+            {/* Completion container */}
+            <AnimatePresence>
+                {completion && activeTab === "completion" && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
+                        className="absolute w-xl mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm left-1/2 -translate-x-1/2 shadow-xs"
+                        style={{
+                            bottom: chatInputHeight > 0 ? `${chatInputHeight + 32}px` : '100px',
+                            height: '300px',
+                            maxHeight: '40vh'
+                        }}
+                    >
+                        <ScrollArea
+                            className="h-full mx-auto"
+                            viewportRef={scrollViewportRef}
+                            onScrollChange={handleScrollChange}
+                            fadingEdges={true}
+                            fadingEdgeClassNameTop="h-16 bg-gradient-to-b from-blue-100 to-transparent"
+                            fadingEdgeClassNameBottom="h-16 bg-gradient-to-t from-blue-100 to-transparent"
+                        >
+                            <div className="flex flex-col w-full max-w-3xl py-4 px-4 mx-auto gap-4">
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.3, delay: 0.1 }}
+                                    className={`flex gap-3 flex-row`}
+                                >
+                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                        {completion}
+                                    </div>
+                                </motion.div>
+                                {
+                                    isLoading && (
+                                        <ShimmeringText
+                                            text="Loading..."
+                                            className="text-sm"
+                                            duration={3}
+                                        />
+                                    )
+                                }
+                                {
+                                    completionError && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="flex gap-3 items-start"
+                                        >
+                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-red-100 rounded-lg text-red-800">
+                                                <XCircleIcon className="size-4 flex-shrink-0" />
+                                                <div className="flex flex-col gap-1">
+                                                    <p className="font-medium text-xs">Error occurred</p>
+                                                    <p className="text-xs">{completionError.message}</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )
+                                }
+                            </div>
+                        </ScrollArea>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Chat Input container */}
             <motion.div
+                ref={chatInputRef}
                 className="absolute left-1/2 w-full flex items-center justify-center px-4 z-10"
                 initial={false}
                 animate={{
-                    y: hasMessages ? "calc(100vh - 100% - 1rem)" : "50vh",
+                    y: (hasMessages && activeTab === 'chat') || (completion && activeTab === 'completion') ? "calc(100vh - 100% - 1rem)" : "50vh",
                     x: "-50%",
                 }}
                 transition={{
@@ -318,14 +477,14 @@ function ChatInput() {
                         <div className="p-2 flex items-center gap-2">
                             <AnimatePresence>
                                 {
-                                    messages.length > 0 && (
+                                    ((hasMessages && activeTab === 'chat') || (completion && activeTab === 'completion')) && (
                                         <motion.div
                                             initial={{ opacity: 0, scale: 0.8 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             exit={{ opacity: 0, scale: 0.8 }}
                                         >
                                             <div
-                                                onClick={() => setMessages([])}
+                                                onClick={onClear}
                                                 className="h-[28px] flex items-center justify-center px-2 py-1 text-sm font-medium rounded-md bg-blue-200 cursor-pointer hover:bg-blue-300/50"
                                             >
                                                 <TrashIcon className="size-4" />
@@ -518,8 +677,8 @@ function ChatInput() {
                     <Textarea
                         className="resize-none py-3 focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] shadow-none"
                         placeholder={activeTab === 'chat' ? "Chat with your model..." : "Enter your prompt for completion..."}
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
+                        value={activeTab === 'chat' ? chatInput : completionInput}
+                        onChange={(e) => activeTab === 'chat' ? setChatInput(e.target.value) : setCompletionInput(e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
@@ -558,5 +717,5 @@ function ChatInput() {
 }
 
 export {
-    ChatInput
+    ModelPlayground
 }

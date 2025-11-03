@@ -283,7 +283,6 @@ function TrainingDataInput() {
 
     return (
         <div id="training-data-input" className="h-screen w-screen flex flex-col relative">
-            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
             <div className="absolute top-0 z-10 w-full bg-transparent">
                 <div className={`${interFont.className} px-6 py-4`}>
                     <h2 className="text-2xl font-semibold">Training Data</h2>

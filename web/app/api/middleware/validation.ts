@@ -24,6 +24,12 @@ export const schemas = {
         apiKey: z.string().optional(),
     }).loose(), // Allow extra fields
 
+    completionRequest: z.object({
+        modelId: z.string().min(1, 'Model ID is required'),
+        prompt: z.string().min(1, 'Prompt is required'),
+        apiKey: z.string().optional(),
+    }).loose(), // Allow extra fields
+
     trainingDataRequest: z.object({
         prompt: z.string().min(10, 'Prompt must be at least 10 characters long')
             .max(5000, 'Prompt cannot exceed 5000 characters'),

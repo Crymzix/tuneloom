@@ -13,6 +13,9 @@ interface ScrollAreaProps
         clientHeight: number
     }) => void
     viewportRef?: React.RefObject<HTMLDivElement | null>
+    fadingEdges?: boolean
+    fadingEdgeClassNameTop?: string
+    fadingEdgeClassNameBottom?: string
 }
 
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({
@@ -20,11 +23,16 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({
     children,
     onScrollChange,
     viewportRef,
+    fadingEdgeClassNameTop,
+    fadingEdgeClassNameBottom,
+    fadingEdges = false,
     ...props
 }, ref) => {
 
     const internalViewportRef = React.useRef<HTMLDivElement>(null)
     const actualViewportRef = viewportRef || internalViewportRef
+    const [isAtTop, setIsAtTop] = React.useState(true)
+    const [isAtBottom, setIsAtBottom] = React.useState(false)
 
     const handleScroll = React.useCallback(() => {
         const viewport = actualViewportRef.current
@@ -34,12 +42,18 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({
 
         const { scrollTop, scrollHeight, clientHeight } = viewport
 
+        // Check if at top (with small tolerance for floating point precision)
+        setIsAtTop(scrollTop <= 1)
+
+        // Check if at bottom (with small tolerance for floating point precision)
+        setIsAtBottom(scrollTop + clientHeight >= scrollHeight - 1)
+
         onScrollChange?.({ scrollTop, scrollHeight, clientHeight })
     }, [onScrollChange, actualViewportRef])
 
     React.useEffect(() => {
         const viewport = actualViewportRef.current
-        if (!viewport || !onScrollChange) {
+        if (!viewport || (!fadingEdges && !onScrollChange)) {
             return
         }
 
@@ -69,6 +83,16 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({
             >
                 {children}
             </ScrollAreaPrimitive.Viewport>
+
+            {/* Top fading edge */}
+            {fadingEdges && !isAtTop && (
+                <div className={cn("absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none", fadingEdgeClassNameTop)} />
+            )}
+
+            {/* Bottom fading edge */}
+            {fadingEdges && !isAtBottom && (
+                <div className={cn("absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none", fadingEdgeClassNameBottom)} />
+            )}
             <ScrollBar />
             <ScrollAreaPrimitive.Corner />
         </ScrollAreaPrimitive.Root>

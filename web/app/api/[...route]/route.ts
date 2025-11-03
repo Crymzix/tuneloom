@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { handle } from 'hono/vercel';
 import { ChatController } from '../controllers/chat.controller';
+import { CompletionController } from '../controllers/completion.controller';
 import { TrainingDataController } from '../controllers/training-data.controller';
 import { FineTuneController } from '../controllers/fine-tune.controller';
 import { ModelNameController } from '../controllers/model-name.controller';
@@ -45,6 +46,18 @@ app.post(
     authMiddleware,
     validateRequest(schemas.chatRequest),
     ChatController.streamChat
+);
+
+/**
+ * Completion endpoint
+ * POST /api/completion
+ * Stream text completions using the custom model
+ */
+app.post(
+    '/completion',
+    authMiddleware,
+    validateRequest(schemas.completionRequest),
+    CompletionController.streamCompletion
 );
 
 /**

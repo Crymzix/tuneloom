@@ -1,17 +1,16 @@
 "use client";
 
 import { LightRays } from "../components/ui/light-rays";
-import { ChatInput } from "../components/sections/chat-input";
+import { ModelPlayground } from "../components/sections/model-playground";
 import { TrainingDataInput } from "../components/sections/training-data-input";
 import { Stepper } from "../components/ui/stepper";
 import { FineTune } from "../components/sections/fine-tine";
 import { Header } from "../components/header";
 import { LinePath } from "../components/ui/line-path";
-import { useRef } from "react";
 import { useScroll } from "../contexts/scroll-context";
 
 const steps = [
-    { id: "chat-input", label: "Model" },
+    { id: "model-playground", label: "Model" },
     { id: "training-data-input", label: "Training Data" },
     { id: "fine-tune", label: "Fine-Tune" },
 ];
@@ -25,7 +24,7 @@ export default function Home() {
             <main className="flex flex-col">
                 <Header />
                 <section className="snap-start">
-                    <ChatInput />
+                    <ModelPlayground />
                 </section>
                 <section className="snap-start">
                     <TrainingDataInput />

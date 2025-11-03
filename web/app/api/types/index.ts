@@ -24,6 +24,17 @@ export interface ChatRequest {
 }
 
 /**
+ * Request body for completion endpoint
+ */
+export interface CompletionRequest {
+    modelId: string;
+    prompt: string;
+    apiKey?: string;
+    recaptchaToken?: string;
+    settings?: ModelSettings;
+}
+
+/**
  * Request body for training data generation endpoint
  */
 export interface TrainingDataRequest {
