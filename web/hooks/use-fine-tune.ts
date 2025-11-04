@@ -80,7 +80,7 @@ export function useUserJobs({
     useEffect(() => {
         if (!user || user.isAnonymous) {
             queryClient.setQueryData(['fine-tune-jobs', user?.uid, selectedUserModelName], [])
-            setHasReceivedFirstUpdate(false)
+            setHasReceivedFirstUpdate(true)
             return
         }
 
@@ -169,7 +169,7 @@ export function useUserModelsByBaseModel(baseModel: string) {
     useEffect(() => {
         if (!user || user.isAnonymous || !baseModel) {
             queryClient.setQueryData(['user-models-by-base', user?.uid, baseModel], [])
-            setHasReceivedFirstUpdate(false)
+            setHasReceivedFirstUpdate(true)
             return
         }
 
@@ -382,7 +382,7 @@ export function useModelVersions(modelId: string | undefined) {
     useEffect(() => {
         if (!user || user.isAnonymous || !modelId) {
             queryClient.setQueryData(['model-versions', modelId], [])
-            setHasReceivedFirstUpdate(false)
+            setHasReceivedFirstUpdate(true)
             return
         }
 

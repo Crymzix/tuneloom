@@ -27,7 +27,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({
     fadingEdgeClassNameBottom,
     fadingEdges = false,
     ...props
-}) => {
+}, ref) => {
 
     const internalViewportRef = React.useRef<HTMLDivElement>(null)
     const actualViewportRef = viewportRef || internalViewportRef
