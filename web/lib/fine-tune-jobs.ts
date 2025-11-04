@@ -11,36 +11,15 @@ import {
     Unsubscribe,
 } from 'firebase/firestore';
 import { convertFirestoreTimestamps } from './utils';
-import type { FineTuneJobConfig } from '../app/api/types';
+import type {
+    FineTuneJob,
+    FineTuneJobStatus,
+    ModelVersionStatus,
+    Model as UserModel,
+    ModelVersion,
+} from '../app/api/types';
 
-/**
- * Fine-tune job status types
- */
-export type FineTuneJobStatus = 'queued' | 'running' | 'completed' | 'failed';
-
-/**
- * Model version status types
- */
-export type ModelVersionStatus = 'building' | 'ready' | 'failed';
-
-/**
- * Fine-tune job interface matching Firestore document
- */
-export interface FineTuneJob {
-    id: string;
-    userId: string;
-    modelId: string;
-    config: FineTuneJobConfig;
-    status: FineTuneJobStatus;
-    progress: number;
-    createdAt: Date;
-    updatedAt: Date;
-    startedAt?: Date;
-    completedAt?: Date;
-    failedAt?: Date;
-    error?: string;
-    cloudRunJobName?: string;
-}
+export type { FineTuneJobStatus, ModelVersionStatus, UserModel, ModelVersion };
 
 /**
  * Subscribe to real-time updates for a user's fine-tune jobs
@@ -196,30 +175,6 @@ export function subscribeToJob(
 }
 
 /**
- * User model interface matching Model document in Firestore
- */
-export interface UserModel {
-    id: string;
-    userId: string;
-    name: string;
-    baseModel: string;
-    status: 'active' | 'archived';
-    createdAt: Date;
-    updatedAt: Date;
-    metadata?: {
-        description?: string;
-        tags?: string[];
-    };
-    apiKeyId?: string;
-    inferenceUrl?: string;
-
-    // Version tracking
-    activeVersionId: string | null; // Currently deployed version
-    latestVersionId: string | null; // Most recently created version
-    versionCount: number; // Total number of versions
-}
-
-/**
  * Subscribe to real-time updates for a user's models filtered by baseModel
  *
  * @param userId - The authenticated user's ID
@@ -319,34 +274,6 @@ export async function getUserModelsByBaseModel(
     return snapshot.docs.map(doc => {
         return convertFirestoreTimestamps(doc.data()) as UserModel;
     });
-}
-
-/**
- * Model version interface matching Firestore document in subcollection
- */
-export interface ModelVersion {
-    id: string;
-    modelId: string;
-    modelName: string;
-    userId: string;
-    versionNumber: number;
-    versionLabel: string;
-    fineTuneJobId: string;
-    adapterPath: string;
-    status: ModelVersionStatus;
-    baseModel: string;
-    config: FineTuneJobConfig;
-    metrics?: {
-        finalLoss?: number;
-        evalLoss?: number;
-        trainRuntime?: number;
-        trainSamplesPerSecond?: number;
-        [key: string]: unknown;
-    };
-    createdAt: Date;
-    updatedAt: Date;
-    readyAt?: Date;
-    failedAt?: Date;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { modelGroups } from '../models';
-import { UserModel } from '../fine-tune-jobs';
+import { Model as UserModel } from '@/app/api/types';
 
 export interface Model {
     name: string;

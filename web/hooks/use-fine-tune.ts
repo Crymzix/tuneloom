@@ -7,10 +7,12 @@ import {
     subscribeToUserModelsByBaseModel,
     getUserModelsByBaseModel,
     subscribeToModelVersions,
-    FineTuneJob as FirestoreFineTuneJob,
-    UserModel,
-    ModelVersion,
 } from '@/lib/fine-tune-jobs'
+import {
+    FineTuneJob as FirestoreFineTuneJob,
+    Model as UserModel,
+    ModelVersion,
+} from '@/app/api/types'
 import { useModelStore } from '../lib/store'
 
 interface CheckModelNameResponse {

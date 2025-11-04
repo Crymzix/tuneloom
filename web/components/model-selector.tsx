@@ -3,7 +3,7 @@ import { modelGroups } from "../lib/models"
 import { useModelStore } from "../lib/store";
 import { BorderBeam } from "./ui/border-beam"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger } from "./ui/select"
-import { UserModel } from "../lib/fine-tune-jobs";
+import { Model as UserModel } from "@/app/api/types";
 import { BrainIcon, Loader2Icon } from "lucide-react";
 
 function ModelSelector({

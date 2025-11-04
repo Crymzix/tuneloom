@@ -5,7 +5,7 @@ import { ScrollArea } from "./ui/scroll-area"
 import { Skeleton } from "./ui/skeleton"
 import { useUserJobs } from "../hooks/use-fine-tune"
 import { formatDate } from "../lib/utils"
-import { FineTuneJobStatus } from "../lib/fine-tune-jobs"
+import { FineTuneJobStatus } from "@/app/api/types"
 import { useModelStore } from "../lib/store"
 
 function FineTuneJobs() {
