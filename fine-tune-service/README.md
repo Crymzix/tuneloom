@@ -1,15 +1,20 @@
 # Fine-Tune Service - Cloud Run Job for Gemma Models
 
-A production-ready fine-tuning service for Gemma models that runs as a Cloud Run Job with NVIDIA L4 GPU support. This service downloads base models and training data from Google Cloud Storage, fine-tunes using LoRA/QLoRA, and saves the resulting model back to GCS.
+A production-ready fine-tuning service for Gemma models that runs as a Cloud Run
+Job with NVIDIA L4 GPU support. This service downloads base models and training
+data from Google Cloud Storage, fine-tunes using LoRA/QLoRA, and saves the
+resulting model back to GCS.
 
 ## Features
 
 - **GPU-Accelerated Training**: Optimized for NVIDIA L4 GPU (24GB VRAM)
 - **Memory-Efficient**: Uses QLoRA (4-bit quantization) for efficient training
-- **GCS Integration**: Seamless integration with Google Cloud Storage for models and data
+- **GCS Integration**: Seamless integration with Google Cloud Storage for models
+  and data
 - **Flexible Training**: Support for various training data formats
 - **Production-Ready**: Automatic cleanup, error handling, and monitoring
-- **Cost-Effective**: Pay only for execution time, scales to zero when not running
+- **Cost-Effective**: Pay only for execution time, scales to zero when not
+  running
 - **Weights & Biases**: Optional experiment tracking and monitoring
 
 ## Architecture
@@ -67,6 +72,7 @@ export BUCKET_NAME="your-bucket-name"  # Optional, defaults to {PROJECT_ID}-mode
 ```
 
 This will:
+
 - Enable required GCP APIs
 - Create Artifact Registry repository
 - Build and push Docker image
@@ -77,24 +83,28 @@ This will:
 Create a JSONL file with your training data. The service supports three formats:
 
 **Format 1: Plain Text**
+
 ```jsonl
 {"text": "Your training text here..."}
 {"text": "Another training example..."}
 ```
 
 **Format 2: Chat Messages**
+
 ```jsonl
 {"messages": [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi!"}]}
 {"messages": [{"role": "user", "content": "How are you?"}, {"role": "assistant", "content": "I'm doing well!"}]}
 ```
 
 **Format 3: Instruction-Following**
+
 ```jsonl
 {"instruction": "Translate to French", "output": "Bonjour"}
 {"instruction": "Summarize this", "output": "Summary..."}
 ```
 
 Upload to GCS:
+
 ```bash
 gsutil cp training_data.jsonl gs://${BUCKET_NAME}/training-data/my-dataset.jsonl
 ```
@@ -102,9 +112,10 @@ gsutil cp training_data.jsonl gs://${BUCKET_NAME}/training-data/my-dataset.jsonl
 ### 3. Run Fine-Tuning Job
 
 **Using a HuggingFace Hub model:**
+
 ```bash
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=google/gemma-2-2b" \
     --args="--output-model-name=my-finetuned-gemma" \
     --args="--training-data-path=training-data/my-dataset.jsonl" \
@@ -114,13 +125,14 @@ gcloud run jobs execute finetune-job \
 ```
 
 **Using a GCS-hosted base model:**
+
 ```bash
 # First, upload base model to GCS
 gsutil -m cp -r /path/to/base-model gs://${BUCKET_NAME}/base-models/gemma-2-2b/
 
 # Then run fine-tuning
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=gemma-2-2b" \
     --args="--gcs-base-model-path=base-models/gemma-2-2b" \
     --args="--output-model-name=my-finetuned-gemma" \
@@ -132,19 +144,23 @@ gcloud run jobs execute finetune-job \
 
 ```bash
 # List executions
-gcloud run jobs executions list --job=finetune-job --region=us-central1
+gcloud run jobs executions list --job=finetune-job --region=europe-west1
 
 # View logs (replace EXECUTION_NAME with actual execution name from above)
-gcloud run jobs executions logs read EXECUTION_NAME --region=us-central1 --follow
+gcloud run jobs executions logs read EXECUTION_NAME --region=europe-west1 --follow
 ```
 
 ### 5. Use Fine-Tuned Model
 
 After training completes, the model is saved to GCS:
-- `gs://{BUCKET_NAME}/models/{output-model-name}/adapter/` - LoRA adapter weights only
-- `gs://{BUCKET_NAME}/models/{output-model-name}/merged/` - Full model with merged weights
+
+- `gs://{BUCKET_NAME}/models/{output-model-name}/adapter/` - LoRA adapter
+  weights only
+- `gs://{BUCKET_NAME}/models/{output-model-name}/merged/` - Full model with
+  merged weights
 
 Use with the inference service:
+
 ```bash
 # The merged model is ready to use with the inference service
 # Just reference it by name: my-finetuned-gemma
@@ -154,60 +170,60 @@ Use with the inference service:
 
 ### Model Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--base-model` | HuggingFace model ID | Required |
-| `--output-model-name` | Name for fine-tuned model | Required |
-| `--gcs-base-model-path` | GCS path to base model (optional) | None |
+| Argument                | Description                       | Default  |
+| ----------------------- | --------------------------------- | -------- |
+| `--base-model`          | HuggingFace model ID              | Required |
+| `--output-model-name`   | Name for fine-tuned model         | Required |
+| `--gcs-base-model-path` | GCS path to base model (optional) | None     |
 
 ### Training Data
 
-| Argument | Description | Default |
-|----------|-------------|---------|
+| Argument               | Description                       | Default  |
+| ---------------------- | --------------------------------- | -------- |
 | `--training-data-path` | GCS path to training data (JSONL) | Required |
-| `--gcs-bucket` | GCS bucket name | Required |
-| `--max-seq-length` | Maximum sequence length | 512 |
+| `--gcs-bucket`         | GCS bucket name                   | Required |
+| `--max-seq-length`     | Maximum sequence length           | 512      |
 
 ### LoRA Parameters
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--lora-r` | LoRA rank (higher = more parameters) | 16 |
-| `--lora-alpha` | LoRA alpha (scaling factor) | 32 |
-| `--lora-dropout` | LoRA dropout rate | 0.05 |
+| Argument         | Description                          | Default |
+| ---------------- | ------------------------------------ | ------- |
+| `--lora-r`       | LoRA rank (higher = more parameters) | 16      |
+| `--lora-alpha`   | LoRA alpha (scaling factor)          | 32      |
+| `--lora-dropout` | LoRA dropout rate                    | 0.05    |
 
 ### Training Parameters
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--learning-rate` | Learning rate | 2e-4 |
-| `--num-train-epochs` | Number of epochs | 3 |
-| `--per-device-train-batch-size` | Batch size per GPU | 4 |
-| `--gradient-accumulation-steps` | Gradient accumulation | 4 |
-| `--warmup-steps` | Number of warmup steps | 100 |
+| Argument                        | Description            | Default |
+| ------------------------------- | ---------------------- | ------- |
+| `--learning-rate`               | Learning rate          | 2e-4    |
+| `--num-train-epochs`            | Number of epochs       | 3       |
+| `--per-device-train-batch-size` | Batch size per GPU     | 4       |
+| `--gradient-accumulation-steps` | Gradient accumulation  | 4       |
+| `--warmup-steps`                | Number of warmup steps | 100     |
 
 ### Quantization
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--use-4bit` | Use 4-bit quantization (QLoRA) | True |
-| `--use-8bit` | Use 8-bit quantization | False |
-| `--no-quantization` | Disable quantization | False |
+| Argument            | Description                    | Default |
+| ------------------- | ------------------------------ | ------- |
+| `--use-4bit`        | Use 4-bit quantization (QLoRA) | True    |
+| `--use-8bit`        | Use 8-bit quantization         | False   |
+| `--no-quantization` | Disable quantization           | False   |
 
 ### Precision
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--bf16` | Use BF16 mixed precision | True |
-| `--fp16` | Use FP16 mixed precision | False |
+| Argument | Description              | Default |
+| -------- | ------------------------ | ------- |
+| `--bf16` | Use BF16 mixed precision | True    |
+| `--fp16` | Use FP16 mixed precision | False   |
 
 ### Monitoring
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--use-wandb` | Enable Weights & Biases logging | False |
-| `--wandb-project` | W&B project name | None |
-| `--wandb-run-name` | W&B run name | None |
+| Argument           | Description                     | Default |
+| ------------------ | ------------------------------- | ------- |
+| `--use-wandb`      | Enable Weights & Biases logging | False   |
+| `--wandb-project`  | W&B project name                | None    |
+| `--wandb-run-name` | W&B run name                    | None    |
 
 ## Example Use Cases
 
@@ -215,7 +231,7 @@ Use with the inference service:
 
 ```bash
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=google/gemma-2-2b" \
     --args="--output-model-name=quick-test" \
     --args="--training-data-path=training-data/small.jsonl" \
@@ -227,7 +243,7 @@ gcloud run jobs execute finetune-job \
 
 ```bash
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=google/gemma-2-2b" \
     --args="--output-model-name=high-quality-model" \
     --args="--training-data-path=training-data/large.jsonl" \
@@ -243,7 +259,7 @@ gcloud run jobs execute finetune-job \
 
 ```bash
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=google/gemma-2-2b" \
     --args="--output-model-name=long-context-model" \
     --args="--training-data-path=training-data/dataset.jsonl" \
@@ -257,7 +273,7 @@ gcloud run jobs execute finetune-job \
 
 ```bash
 gcloud run jobs execute finetune-job \
-    --region=us-central1 \
+    --region=europe-west1 \
     --args="--base-model=google/gemma-2-2b" \
     --args="--output-model-name=monitored-model" \
     --args="--training-data-path=training-data/dataset.jsonl" \
@@ -271,11 +287,13 @@ gcloud run jobs execute finetune-job \
 ## Cost Estimation
 
 **GPU Costs (NVIDIA L4):**
+
 - ~$0.80/hour for L4 GPU
 - Typical fine-tuning: 30-60 minutes
 - Estimated cost per job: $0.40 - $0.80
 
 **Storage Costs:**
+
 - Training data: Minimal (usually < 1GB)
 - Base model: $0.02/GB/month (cached)
 - Fine-tuned model: ~$0.10-0.20/month for adapter weights
@@ -289,21 +307,25 @@ gcloud run jobs execute finetune-job \
 If you encounter OOM errors, try:
 
 1. **Reduce batch size:**
+
 ```bash
 --args="--per-device-train-batch-size=2"
 ```
 
 2. **Increase gradient accumulation:**
+
 ```bash
 --args="--gradient-accumulation-steps=8"
 ```
 
 3. **Reduce sequence length:**
+
 ```bash
 --args="--max-seq-length=256"
 ```
 
 4. **Reduce LoRA rank:**
+
 ```bash
 --args="--lora-r=8"
 ```
@@ -311,6 +333,7 @@ If you encounter OOM errors, try:
 ### Job Timeout
 
 If jobs timeout, increase the timeout in `deploy.sh`:
+
 ```bash
 TIMEOUT="${TIMEOUT:-7200}"  # 2 hours
 ```
@@ -318,6 +341,7 @@ TIMEOUT="${TIMEOUT:-7200}"  # 2 hours
 ### Slow Training
 
 To speed up training:
+
 - Increase batch size (if memory allows)
 - Reduce gradient accumulation steps
 - Use larger GPU (A100 for faster training)
@@ -337,15 +361,18 @@ def tokenize_function(examples):
 ### Multi-GPU Training
 
 To use multiple GPUs, update the deployment script:
+
 ```bash
 GPU_COUNT="${GPU_COUNT:-2}"
 ```
 
-Note: Multi-GPU support requires additional configuration in the training script.
+Note: Multi-GPU support requires additional configuration in the training
+script.
 
 ### Using Different Models
 
 The service works with any causal language model from HuggingFace:
+
 - `google/gemma-2-2b`
 - `google/gemma-2-9b`
 - `meta-llama/Llama-2-7b-hf`
@@ -363,6 +390,7 @@ cd ../inference-service
 ```
 
 Example API call:
+
 ```python
 from openai import OpenAI
 
@@ -400,9 +428,11 @@ fine-tune-service/
 ## Monitoring and Logging
 
 ### View Logs in Cloud Console
-https://console.cloud.google.com/run/jobs/details/us-central1/finetune-job
+
+https://console.cloud.google.com/run/jobs/details/europe-west1/finetune-job
 
 ### Programmatic Log Access
+
 ```python
 from google.cloud import logging
 
@@ -416,6 +446,7 @@ for entry in logger.list_entries():
 ## Support
 
 For issues or questions:
+
 1. Check Cloud Run logs for error messages
 2. Verify GCS paths and permissions
 3. Ensure training data format is correct

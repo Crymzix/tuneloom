@@ -261,7 +261,7 @@ gcloud builds submit --tag gcr.io/YOUR_PROJECT/inference-service
 gcloud run deploy inference-service \
   --image gcr.io/YOUR_PROJECT/inference-service \
   --platform managed \
-  --region us-central1 \
+  --region europe-west1 \
   --memory 16Gi \
   --cpu 4 \
   --gpu 1 \

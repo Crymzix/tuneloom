@@ -18,8 +18,8 @@ setGlobalDispatcher(new Agent({
     headersTimeout: 0,
 }));
 
-export const dynamic = 'force-dynamic'
-export const maxDuration = API_CONFIG.MAX_DURATION;
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const app = new Hono().basePath(API_CONFIG.BASE_PATH);
 app.onError(errorHandler);

@@ -104,6 +104,7 @@ class JobConfig:
     training_data_path: str
     gcs_bucket: str
     version_label: str
+    webhook_url: str
     job_id: Optional[str] = None
     gcs_base_model_path: Optional[str] = None
     gcs_output_path: Optional[str] = None

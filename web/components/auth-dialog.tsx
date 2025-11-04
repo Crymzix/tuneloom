@@ -9,7 +9,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { GoogleAuthProvider, linkWithPopup, signInWithCredential, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, linkWithPopup, signInWithCredential, signInWithPopup, AuthCredential, AuthError } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/contexts/auth-context";
 import { useModelStore } from "../lib/store";
@@ -39,13 +39,13 @@ export function AuthDialog({ open, onOpenChange, onSignInSuccess }: AuthDialogPr
                     await linkWithPopup(user, provider);
                     console.log("Successfully linked anonymous account with Google");
                 } catch (linkError: unknown) {
-                    const error = linkError as { code?: string; credential?: any };
+                    const error = linkError as { code?: string; credential?: AuthCredential | null };
 
                     // If the credential is already in use, sign in with that existing account
                     if (error.code === "auth/credential-already-in-use") {
                         console.log("Account already exists, signing in with existing account");
 
-                        const credential = GoogleAuthProvider.credentialFromError(error as any);
+                        const credential = GoogleAuthProvider.credentialFromError(error as AuthError);
                         if (credential) {
                             await signInWithCredential(auth, credential);
                         } else {

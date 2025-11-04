@@ -64,6 +64,12 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Version label for this fine-tune (e.g., v1, v2)",
     )
+    required.add_argument(
+        "--webhook-url",
+        type=str,
+        required=True,
+        help="Webhook URL to send job completion status update to",
+    )
 
     # Job configuration
     job_group = parser.add_argument_group("job configuration")
@@ -229,6 +235,7 @@ def create_config_from_args(args: argparse.Namespace) -> FineTuneJobConfig:
         training_data_path=args.training_data_path,
         gcs_bucket=args.gcs_bucket,
         version_label=args.version_label,
+        webhook_url=args.webhook_url,
         job_id=args.job_id,
         gcs_base_model_path=args.gcs_base_model_path,
         gcs_output_path=args.gcs_output_path,

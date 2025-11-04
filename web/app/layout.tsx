@@ -6,7 +6,6 @@ import { ScrollAreaWrapper } from "@/components/scroll-area-wrapper";
 import { AuthProvider } from "@/contexts/auth-context";
 import { QueryProvider } from "@/contexts/query-provider";
 import { RecaptchaProvider } from "@/contexts/recaptcha-context";
-import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({

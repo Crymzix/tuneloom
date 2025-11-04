@@ -9,9 +9,9 @@ import {
     doc,
     getDoc,
     Unsubscribe,
-    Timestamp,
 } from 'firebase/firestore';
 import { convertFirestoreTimestamps } from './utils';
+import type { FineTuneJobConfig } from '../app/api/types';
 
 /**
  * Fine-tune job status types
@@ -30,13 +30,7 @@ export interface FineTuneJob {
     id: string;
     userId: string;
     modelId: string;
-    config: {
-        baseModel: string;
-        outputModelName: string;
-        trainingDataPath: string;
-        gcsBucket: string;
-        [key: string]: any;
-    };
+    config: FineTuneJobConfig;
     status: FineTuneJobStatus;
     progress: number;
     createdAt: Date;
@@ -341,13 +335,7 @@ export interface ModelVersion {
     adapterPath: string;
     status: ModelVersionStatus;
     baseModel: string;
-    config: {
-        baseModel: string;
-        outputModelName: string;
-        trainingDataPath: string;
-        gcsBucket: string;
-        [key: string]: any;
-    };
+    config: FineTuneJobConfig;
     metrics?: {
         finalLoss?: number;
         evalLoss?: number;

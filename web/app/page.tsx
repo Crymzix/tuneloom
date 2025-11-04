@@ -40,7 +40,7 @@ export default function Home() {
                 }}
             />
             <LinePath
-                className="absolute -right-[14%] top-10 -z-10"
+                className="absolute -right-[12%] top-10 -z-10"
                 scrollYProgress={scrollProgress}
             />
             <LightRays reverse />

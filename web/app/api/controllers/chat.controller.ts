@@ -33,7 +33,7 @@ export class ChatController {
                 ...(settings?.presencePenalty !== undefined && { presencePenalty: settings.presencePenalty }),
             };
 
-            if (Object.values(MODEL_IDS).includes(modelId as any)) {
+            if ((Object.values(MODEL_IDS) as string[]).includes(modelId)) {
                 const result = streamText({
                     model: customProvider(modelId),
                     ...baseOptions,

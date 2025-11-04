@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useRef, useCallback } from "react"
+import { ReactNode, useCallback } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useScroll } from "@/contexts/scroll-context"
 

@@ -19,7 +19,7 @@ echo -e "${GREEN}=== Cloud Run Fine-Tuning Job Deployment ===${NC}\n"
 # ============================================================================
 
 PROJECT_ID="${PROJECT_ID:-}"
-REGION="${REGION:-us-central1}"
+REGION="${REGION:-europe-west1}"
 JOB_NAME="${JOB_NAME:-finetune-job}"
 BUCKET_NAME="${BUCKET_NAME:-}"
 IMAGE_NAME="finetune-service"

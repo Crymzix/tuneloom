@@ -1,6 +1,5 @@
 import { Context } from 'hono';
 import { z, ZodSchema } from 'zod';
-import { MODEL_IDS } from '../config/constants';
 
 /**
  * Validation schemas for API requests
@@ -33,20 +32,7 @@ export const schemas = {
     trainingDataRequest: z.object({
         prompt: z.string().min(10, 'Prompt must be at least 10 characters long')
             .max(5000, 'Prompt cannot exceed 5000 characters'),
-    }),
-
-    modelName: z.string()
-        .min(1, 'Model name is required')
-        .max(26, 'Model name must be 26 characters or less')
-        .regex(/^[a-z0-9-]+$/, 'Model name must contain only lowercase letters, numbers, and hyphens')
-        .refine(
-            (name) => !name.startsWith('-') && !name.endsWith('-'),
-            'Model name cannot start or end with a hyphen'
-        )
-        .refine(
-            (name) => !name.includes('--'),
-            'Model name cannot contain consecutive hyphens'
-        ),
+    }).loose(),
 
     startFineTuneRequest: z.object({
         modelId: z.string().optional(),
@@ -66,7 +52,7 @@ export const schemas = {
         {
             message: 'Either modelId or modelName must be provided, but not both',
         }
-    ),
+    ).loose(),
 
     checkModelNameQuery: z.object({
         name: z.string()

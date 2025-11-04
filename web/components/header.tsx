@@ -11,7 +11,7 @@ function Header() {
         <header className="fixed top-0 w-full z-40 pointer-events-none">
             <div className="flex px-6 py-4 items-center gap-2 justify-end">
                 <div className="flex items-center pointer-events-auto">
-                    <img src="/logo.svg" alt="Tuneloom" className="size-6 mr-2 object-contain" />
+                    <img src="/logo.svg" alt="Tuneloom" className="size-9 mr-2 object-contain" />
                     <div className={`${pacificoFont.className} text-3xl font-medium text-blue-400`}>
                         tuneloom
                     </div>

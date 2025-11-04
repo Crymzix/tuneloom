@@ -15,7 +15,7 @@ interface VersionsProps {
 
 function Versions({ modelId }: VersionsProps) {
     const { selectedModel } = useModelStore()
-    const { data: userModels = [], isLoading: loadingUserModels } = useUserModelsByBaseModel(selectedModel?.hf_id || '')
+    const { data: userModels = [] } = useUserModelsByBaseModel(selectedModel?.hf_id || '')
     const { data: versions = [], isLoading: loadingVersions } = useModelVersions(modelId)
     const activateVersion = useActivateVersion()
 
@@ -184,7 +184,7 @@ function Versions({ modelId }: VersionsProps) {
                             </EmptyMedia>
                             <EmptyTitle>No versions yet</EmptyTitle>
                             <EmptyDescription>
-                                This model doesn't have any versions yet. Create a fine-tune job to generate the first version.
+                                This model doesn&apos;t have any versions yet. Create a fine-tune job to generate the first version.
                             </EmptyDescription>
                         </EmptyHeader>
                     </Empty>

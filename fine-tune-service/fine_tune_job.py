@@ -9,7 +9,10 @@ and training execution.
 import os
 import logging
 import shutil
+import json
 from pathlib import Path
+from urllib import request as urllib_request
+from urllib.error import URLError
 
 from .config import FineTuneJobConfig
 from .storage import GCSStorageManager
@@ -129,6 +132,9 @@ class FineTuneJob:
                 }
             )
 
+            # Send webhook notification
+            self._send_webhook_notification(success=True)
+
             logger.info("=" * 80)
             logger.info("Fine-Tuning Job Complete!")
             logger.info(f"Output: {output_uri}")
@@ -137,6 +143,8 @@ class FineTuneJob:
         except Exception as e:
             logger.error(f"Fine-tuning job failed: {e}", exc_info=True)
             self.job_tracker.mark_failed(str(e))
+            # Send webhook notification on failure
+            self._send_webhook_notification(success=False)
             raise
         finally:
             self._cleanup()
@@ -156,6 +164,38 @@ class FineTuneJob:
         logger.info(
             f"Quantization: {self.config.quantization.quantization_type or 'None'}"
         )
+
+    def _send_webhook_notification(self, success: bool) -> None:
+        """
+        Send webhook notification to external service.
+
+        Args:
+            success: True if job completed successfully, False if it failed
+        """
+        try:
+            webhook_url = self.config.job.webhook_url
+            logger.info(f"Sending webhook notification to {webhook_url}")
+
+            # Prepare payload
+            payload = {
+                "success": success
+            }
+            json_data = json.dumps(payload).encode('utf-8')
+
+            # Create and send request
+            req = urllib_request.Request(
+                webhook_url,
+                data=json_data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+
+            with urllib_request.urlopen(req, timeout=10) as response:
+                logger.info(f"Webhook notification sent successfully (status: {response.getcode()})")
+        except URLError as e:
+            logger.error(f"Failed to send webhook notification: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error sending webhook notification: {e}")
 
     def _cleanup(self) -> None:
         """Cleanup local cache to free disk space."""

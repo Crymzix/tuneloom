@@ -12,14 +12,14 @@ export const modelGroups = [
             },
             {
                 "name": "Gemma 3 1B",
-                "hf_id": "google/gemma-3-1b",
+                "hf_id": "google/gemma-3-1b-it",
                 "params": "1B",
                 "license": "Gemma License",
                 "type": "General"
             },
             {
                 "name": "Gemma 3 4B",
-                "hf_id": "google/gemma-3-4b",
+                "hf_id": "google/gemma-3-4b-it",
                 "params": "4B",
                 "license": "Gemma License",
                 "type": "General"

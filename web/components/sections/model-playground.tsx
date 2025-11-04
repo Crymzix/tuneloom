@@ -602,7 +602,7 @@ function ModelPlayground() {
                                                             <InfoIcon className="size-3.5 text-muted-foreground cursor-help" />
                                                         </TooltipTrigger>
                                                         <TooltipContent side="right" className="max-w-xs">
-                                                            Maximum number of tokens (words/subwords) in the model's response. One token ≈ 4 characters in English. Set lower for concise responses, higher for detailed ones.
+                                                            Maximum number of tokens (words/subwords) in the model&apos;s response. One token ≈ 4 characters in English. Set lower for concise responses, higher for detailed ones.
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </div>

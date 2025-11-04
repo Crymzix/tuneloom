@@ -1,10 +1,9 @@
-import { FatalError } from "workflow";
+import { createWebhook, FatalError } from "workflow";
 import { getAdminFirestore } from "../../../lib/firebase-admin";
 import { getJobsClient } from "../config/providers";
 import { FineTuneJob, FineTuneJobConfig, Model, ModelApiKey, ModelVersion } from "../types";
 import crypto from 'crypto';
 import { encrypt } from "../utils/encryption";
-import { FieldValue } from "firebase-admin/firestore";
 
 /**
  * Parameters for queuing a fine-tune job
@@ -14,6 +13,7 @@ export interface QueueFineTuneJobParams {
     modelVersionLabel: string;
     userId: string;
     config: FineTuneJobConfig;
+    webhookUrl: string;
 }
 
 export async function queueFineTuneJob(jobId: string) {
@@ -25,12 +25,24 @@ export async function queueFineTuneJob(jobId: string) {
             modelVersion
         } = await fetchJobData(jobId);
 
+        const webhook = createWebhook();
+
         const cloudRunJobName = await executeCloudRunJob({
             jobId,
             modelVersionLabel: modelVersion.versionLabel,
             userId: job.userId,
             config: job.config,
+            webhookUrl: webhook.url,
         });
+
+        // Workflow pauses until an HTTP request is received at the webhook URL
+        const request = await webhook;
+        console.log(`Received webhook request for job ${jobId}:`, request.method, request.url);
+        const data = await request.json() as { success: boolean };
+
+        if (!data.success) {
+            throw new FatalError('Fine-tune job failed.');
+        }
 
         // Update model and model version if job completed successfully. 
         // We can only get to this step if the job was successful.
@@ -166,7 +178,7 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
 
     const client = getJobsClient();
     const projectId = await client.getProjectId()
-    const name = `projects/${projectId}/locations/us-central1/jobs/finetune-job`;
+    const name = `projects/${projectId}/locations/europe-west1/jobs/finetune-job`;
 
     const args = [
         `--base-model=${config.baseModel}`,
@@ -175,6 +187,7 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
         `--gcs-bucket=${config.gcsBucket}`,
         `--job-id=${jobId}`,
         `--version-label=${params.modelVersionLabel}`,
+        `--webhook-url=${params.webhookUrl}`,
     ];
 
     // Fine-tune settings
@@ -208,14 +221,10 @@ async function executeCloudRunJob(params: QueueFineTuneJobParams): Promise<strin
         });
 
         console.log(`Cloud Run Job execution started: ${execution.name}`);
-        const [response] = await execution.promise();
-        console.log(`Successfully executed job: ${response.name}`);
-
-        if (!response.name) {
-            throw new FatalError('Cloud Run Job execution response missing name');
+        if (!execution.name) {
+            throw new Error('Cloud Run Job execution name is undefined');
         }
-
-        return response.name;
+        return execution.name;
     } catch (error) {
         console.error('Error creating Cloud Run Job:', error);
 

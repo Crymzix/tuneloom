@@ -74,7 +74,7 @@ function FineTune() {
     const selectedModelCompany = getSelectedModelCompany()
     const debouncedModelName = useDebounce(modelName, 500)
 
-    const { data: userModels = [], isLoading: loadingUserModels } = useUserModelsByBaseModel(
+    const { data: userModels = [] } = useUserModelsByBaseModel(
         selectedModel?.hf_id || ''
     )
 
@@ -90,7 +90,7 @@ function FineTune() {
         error: modelNameCheckError,
     } = useCheckModelName(debouncedModelName, debouncedModelName.length > 0)
 
-    const { data: jobs = [], isLoading: loadingJobs } = useUserJobs()
+    const { data: jobs = [] } = useUserJobs()
 
     const hasQueuedJobs = useMemo(() => {
         return jobs.some(job => job.status === 'queued')
@@ -420,7 +420,7 @@ function FineTune() {
                                                         </p>
                                                         <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
                                                             <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                {selectedUserModel?.inferenceUrl}
+                                                                {`${process.env.NEXT_PUBLIC_INFERENCE_URL}/v1/${selectedUserModel?.name || ''}`}
                                                             </code>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
@@ -568,6 +568,11 @@ function FineTune() {
                                                 onClick={handleStartFineTune}
                                                 disabled={!canStartFineTune() || isStarting}
                                             >
+                                                {
+                                                    isStarting && (
+                                                        <Loader2 className="size-4 animate-spin mr-2" />
+                                                    )
+                                                }
                                                 <Play className="size-4" />
                                                 Start Fine-tuning
                                             </Button>

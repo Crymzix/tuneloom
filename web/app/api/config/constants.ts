@@ -2,7 +2,6 @@
  * API configuration constants
  */
 export const API_CONFIG = {
-    MAX_DURATION: 60, // Maximum duration for streaming responses in seconds
     BASE_PATH: '/api',
 } as const;
 

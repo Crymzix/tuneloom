@@ -108,7 +108,7 @@ const MODEL_SPEEDS: Record<ModelSize, {
 
 function FineTuneSettings({ config, setConfig }: FineTuneSettingsProps) {
     const { selectedModel } = useModelStore()
-    const { data: trainingData = [], isLoading: isLoadingTrainingData } = useTrainingData()
+    const { data: trainingData = [] } = useTrainingData()
 
     const [selectedPreset, setSelectedPreset] = useState<PresetKey>('quick');
 
@@ -426,7 +426,7 @@ function FineTuneSettings({ config, setConfig }: FineTuneSettingsProps) {
                                                         <HelpCircle className="size-3.5 cursor-help" />
                                                     </TooltipTrigger>
                                                     <TooltipContent className="w-64">
-                                                        Randomly "forgets" some learning during training to prevent over-memorization. Like practicing with distractions to build resilience. 0.05 is usually good.
+                                                        Randomly &quot;forgets&quot; some learning during training to prevent over-memorization. Like practicing with distractions to build resilience. 0.05 is usually good.
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </label>

@@ -18,7 +18,7 @@ echo -e "${GREEN}=== Cloud Run Inference Service Deployment ===${NC}\n"
 # ============================================================================
 
 PROJECT_ID="${PROJECT_ID:-}"
-REGION="${REGION:-us-central1}"
+REGION="${REGION:-europe-west1}"
 SERVICE_NAME="${SERVICE_NAME:-inference-service}"
 BUCKET_NAME="${BUCKET_NAME:-}"
 IMAGE_NAME="inference-service"

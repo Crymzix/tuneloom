@@ -25,14 +25,14 @@ export function formatDate(date: Date): string {
 /**
  * Convert Firestore timestamp to Date
  */
-function convertTimestamp(timestamp: any): Date {
+function convertTimestamp(timestamp: Timestamp | { toDate: () => Date } | Date): Date {
     if (timestamp instanceof Timestamp) {
         return timestamp.toDate();
     }
-    if (timestamp?.toDate) {
+    if (typeof timestamp === 'object' && timestamp !== null && 'toDate' in timestamp) {
         return timestamp.toDate();
     }
-    return timestamp;
+    return timestamp as Date;
 }
 
 /**
@@ -48,14 +48,18 @@ function convertTimestamp(timestamp: any): Date {
  * // All timestamp fields are now Date objects
  * ```
  */
-export function convertFirestoreTimestamps<T = any>(data: any): T {
+export function convertFirestoreTimestamps<T = unknown>(data: unknown): T {
     if (data === null || data === undefined) {
         return data as T;
     }
 
     // Handle Timestamp conversion
-    if (data instanceof Timestamp || data?.toDate) {
+    if (data instanceof Timestamp) {
         return convertTimestamp(data) as T;
+    }
+
+    if (typeof data === 'object' && data !== null && 'toDate' in data && typeof (data as { toDate?: unknown }).toDate === 'function') {
+        return convertTimestamp(data as { toDate: () => Date }) as T;
     }
 
     // Handle arrays
@@ -65,10 +69,11 @@ export function convertFirestoreTimestamps<T = any>(data: any): T {
 
     // Handle plain objects
     if (typeof data === 'object' && data.constructor === Object) {
-        const converted: any = {};
-        for (const key in data) {
-            if (data.hasOwnProperty(key)) {
-                converted[key] = convertFirestoreTimestamps(data[key]);
+        const converted: Record<string, unknown> = {};
+        const dataRecord = data as Record<string, unknown>;
+        for (const key in dataRecord) {
+            if (Object.prototype.hasOwnProperty.call(dataRecord, key)) {
+                converted[key] = convertFirestoreTimestamps(dataRecord[key]);
             }
         }
         return converted as T;

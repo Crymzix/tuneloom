@@ -88,7 +88,7 @@ function TrainingDataInput() {
         if (hasInitializedRef.current && !isLoadingData) {
             saveTrainingDataMutation.mutate(debouncedRows)
         }
-    }, [debouncedRows])
+    }, [debouncedRows, isLoading])
 
     useEffect(() => {
         if (saveStatus === 'saved') {
@@ -367,7 +367,7 @@ function TrainingDataInput() {
                                 </TooltipTrigger>
                                 <TooltipContent side="bottom" className='w-sm'>
                                     <p>
-                                        Upload a CSV or JSON file containing training data. Ensure your CSV only has 2 columns: Input and Output. For JSON, use an array of objects with "input" and "output" fields.
+                                        Upload a CSV or JSON file containing training data. Ensure your CSV only has 2 columns: Input and Output. For JSON, use an array of objects with &quot;input&quot; and &quot;output&quot; fields.
                                     </p>
                                 </TooltipContent>
                             </Tooltip>

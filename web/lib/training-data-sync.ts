@@ -3,6 +3,10 @@ import { storage } from './firebase'
 import { convertToJSONL, parseJSONL } from './utils/jsonl'
 import { User } from 'firebase/auth'
 
+interface StorageError {
+    code?: string;
+}
+
 interface TrainingDataRow {
     input: string
     output: string
@@ -96,9 +100,9 @@ export async function loadTrainingDataFromGCS(
 
         console.log(`Training data loaded from GCS: ${storagePath}`)
         return rows
-    } catch (error: any) {
+    } catch (error: unknown) {
         // If file doesn't exist, return null (not an error)
-        if (error?.code === 'storage/object-not-found') {
+        if ((error as StorageError)?.code === 'storage/object-not-found') {
             console.log('No training data found in GCS for this model')
             return null
         }
@@ -138,9 +142,9 @@ export async function deleteTrainingDataFromGCS(
         await deleteObject(storageRef)
 
         console.log(`Training data deleted from GCS: ${storagePath}`)
-    } catch (error: any) {
+    } catch (error: unknown) {
         // If file doesn't exist, that's okay
-        if (error?.code === 'storage/object-not-found') {
+        if ((error as StorageError)?.code === 'storage/object-not-found') {
             console.log('No training data to delete in GCS')
             return
         }
