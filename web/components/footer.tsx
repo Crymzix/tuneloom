@@ -1,28 +1,28 @@
+import Link from "next/link";
+
 export function Footer() {
     return (
-        <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 py-3 px-6 z-50">
-            <div className="max-w-7xl mx-auto">
-                <p className="text-xs text-gray-600 text-center">
-                    This site is protected by reCAPTCHA and the Google{' '}
-                    <a
-                        href="https://policies.google.com/privacy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
+        <footer className="bg-blue-50/80 backdrop-blur-sm py-3 px-6 z-50">
+            <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-600">
+                <div className="flex items-center space-x-1">
+                    <span>&copy; {new Date().getFullYear()} Tuneloom.</span>
+                    <span className="hidden sm:inline">All rights reserved.</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Link
+                        href="/privacy-policy"
+                        className="hover:text-white hover:bg-blue-200 rounded-xl px-2.5 py-1 transition-colors"
                     >
                         Privacy Policy
-                    </a>{' '}
-                    and{' '}
-                    <a
-                        href="https://policies.google.com/terms"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
+                    </Link>
+                    <span className="text-gray-300">|</span>
+                    <Link
+                        href="/terms-of-service"
+                        className="hover:text-white hover:bg-blue-200 rounded-xl px-2.5 py-1 transition-colors"
                     >
                         Terms of Service
-                    </a>{' '}
-                    apply.
-                </p>
+                    </Link>
+                </div>
             </div>
         </footer>
     )

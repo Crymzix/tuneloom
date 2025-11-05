@@ -30,6 +30,7 @@ import { FineTuneJobs } from '../fine-tune-jobs'
 import { Versions } from '../versions'
 import { useRecaptcha } from '../../contexts/recaptcha-context'
 import { toast } from 'sonner'
+import { Footer } from '../footer'
 
 const fineTuneTabs = [
     { id: 'fine-tune-jobs', label: 'Fine-tune Jobs' },
@@ -601,6 +602,7 @@ function FineTune() {
                 onOpenChange={setIsAuthDialogOpen}
                 onSignInSuccess={startFineTune}
             />
+            <Footer />
         </div>
     )
 }

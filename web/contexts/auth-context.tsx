@@ -8,6 +8,8 @@ import {
     signOut as firebaseSignOut,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useModelStore } from "../lib/store";
+import { modelGroups } from "../lib/models";
 
 interface AuthContextType {
     user: User | null;
@@ -20,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const { setSelectedModel, setSelectedUserModel } = useModelStore()
 
     useEffect(() => {
         // Only run on client side
@@ -54,6 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await firebaseSignOut(auth);
             setUser(null);
+            setSelectedModel(modelGroups[0].models[0]);
+            setSelectedUserModel(null);
         } catch (error) {
             console.error("Error signing out:", error);
             throw error;

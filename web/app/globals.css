@@ -152,4 +152,6 @@
 /* reCAPTCHA badge styling */
 .grecaptcha-badge {
   z-index: 50 !important; /* Adjust this value as needed */
+  border-radius: 3px !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
 }
