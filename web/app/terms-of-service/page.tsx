@@ -4,8 +4,8 @@ import { Footer } from "@/components/footer";
 import { ArrowLeftIcon } from "lucide-react";
 
 export const metadata: Metadata = {
-    title: "Terms of Service - Tuneloom",
-    description: "Terms of service for Tuneloom",
+    title: "Terms of Service - tuneloom",
+    description: "Terms of service for tuneloom",
 };
 
 export default function TermsOfService() {
@@ -33,7 +33,7 @@ export default function TermsOfService() {
                             1. Acceptance of Terms
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            By accessing or using Tuneloom ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, please do not use our Service. These Terms constitute a legally binding agreement between you and Tuneloom.
+                            By accessing or using tuneloom ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, please do not use our Service. These Terms constitute a legally binding agreement between you and tuneloom.
                         </p>
                     </section>
 
@@ -42,7 +42,7 @@ export default function TermsOfService() {
                             2. Description of Service
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            Tuneloom provides a platform for users to fine-tune large language models with custom training data and host these models for inference. Our Service includes tools for data upload, model configuration, training execution, and API-based model hosting.
+                            tuneloom provides a platform for users to fine-tune large language models with custom training data and host these models for inference. Our Service includes tools for data upload, model configuration, training execution, and API-based model hosting.
                         </p>
                     </section>
 
@@ -176,7 +176,7 @@ export default function TermsOfService() {
                             8.1 Our IP
                         </h3>
                         <p className="text-gray-700 leading-relaxed">
-                            The Service, including its software, design, branding, and documentation, is owned by Tuneloom and protected by intellectual property laws. You may not copy, modify, or create derivative works without our permission.
+                            The Service, including its software, design, branding, and documentation, is owned by tuneloom and protected by intellectual property laws. You may not copy, modify, or create derivative works without our permission.
                         </p>
 
                         <h3 className="text-xl font-semibold text-gray-800 mb-3 mt-4">
@@ -251,7 +251,7 @@ export default function TermsOfService() {
                             12. Limitation of Liability
                         </h2>
                         <p className="text-gray-700 leading-relaxed mb-3">
-                            TO THE MAXIMUM EXTENT PERMITTED BY LAW, TUNELOOM SHALL NOT BE LIABLE FOR:
+                            TO THE MAXIMUM EXTENT PERMITTED BY LAW, tuneloom SHALL NOT BE LIABLE FOR:
                         </p>
                         <ul className="list-disc pl-6 text-gray-700 space-y-2">
                             <li>Indirect, incidental, consequential, or punitive damages</li>
@@ -269,7 +269,7 @@ export default function TermsOfService() {
                             13. Indemnification
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            You agree to indemnify and hold Tuneloom harmless from any claims, damages, or expenses arising from: (a) your use of the Service, (b) your content or training data, (c) your violation of these Terms, or (d) your violation of any third-party rights.
+                            You agree to indemnify and hold tuneloom harmless from any claims, damages, or expenses arising from: (a) your use of the Service, (b) your content or training data, (c) your violation of these Terms, or (d) your violation of any third-party rights.
                         </p>
                     </section>
 
@@ -281,7 +281,7 @@ export default function TermsOfService() {
                             14.1 Governing Law
                         </h3>
                         <p className="text-gray-700 leading-relaxed">
-                            These Terms are governed by the laws of the jurisdiction in which Tuneloom is established, without regard to conflict of law principles.
+                            These Terms are governed by the laws of the jurisdiction in which tuneloom is established, without regard to conflict of law principles.
                         </p>
 
                         <h3 className="text-xl font-semibold text-gray-800 mb-3 mt-4">
@@ -309,7 +309,7 @@ export default function TermsOfService() {
                             16.1 Entire Agreement
                         </h3>
                         <p className="text-gray-700 leading-relaxed">
-                            These Terms, together with our Privacy Policy, constitute the entire agreement between you and Tuneloom.
+                            These Terms, together with our Privacy Policy, constitute the entire agreement between you and tuneloom.
                         </p>
 
                         <h3 className="text-xl font-semibold text-gray-800 mb-3 mt-4">

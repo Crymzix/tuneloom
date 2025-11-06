@@ -11,6 +11,10 @@ export const API_CONFIG = {
 export const TRAINING_DATA_CONFIG = {
     MIN_EXAMPLES: 5,
     MAX_EXAMPLES: 10,
+    DEFAULT_NUM_EXAMPLES: 10,
+    DEFAULT_NUM_AGENTS: 10,
+    MAX_AGENTS: 50, // Limit to avoid rate limits and timeouts
+    TIMEOUT_MS: 270000, // 270 seconds (30s buffer before Vercel's 300s limit)
     SYSTEM_PROMPT: `You are a helpful assistant that generates training data for fine-tuning language models.
 
 Based on the user's description, generate an array of training data examples. Each example should have an "input" field (the prompt/question) and an "output" field (the expected completion/answer).
@@ -27,6 +31,36 @@ IMPORTANT: Your response MUST be a valid JSON array of objects with this exact s
 
 Do not include any additional text, explanations, or markdown formatting. Only return the raw JSON array.`,
 } as const;
+
+/**
+ * Agent role configurations for diverse synthetic data generation
+ */
+export const AGENT_ROLES = [
+    {
+        name: 'standard',
+        temperature: 0.7,
+        systemPrompt: `You are a helpful assistant that generates typical, well-structured training examples.
+Focus on common use cases and standard patterns that represent the most frequent scenarios.`,
+    },
+    {
+        name: 'creative',
+        temperature: 1.0,
+        systemPrompt: `You are a creative assistant that generates unusual and innovative training examples.
+Focus on edge cases, rare scenarios, and creative interpretations that push boundaries.`,
+    },
+    {
+        name: 'technical',
+        temperature: 0.5,
+        systemPrompt: `You are a technical expert that generates precise and detailed training examples.
+Focus on technical accuracy, specialized terminology, and domain-specific knowledge.`,
+    },
+    {
+        name: 'adversarial',
+        temperature: 0.9,
+        systemPrompt: `You are an analytical assistant that generates challenging training examples.
+Focus on ambiguous cases, complex reasoning, boundary conditions, and examples that test model limits.`,
+    },
+] as const;
 
 
 export const MODEL_IDS = {

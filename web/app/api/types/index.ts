@@ -40,6 +40,10 @@ export interface CompletionRequest {
 export interface TrainingDataRequest {
     prompt: string;
     recaptchaToken?: string;
+    numExamples?: number; // Total number of examples to generate (default: 10)
+    numAgents?: number; // Number of parallel agents to use (default: 1)
+    useAgenticPipeline?: boolean; // Enable multi-agent generation (default: false)
+    diverseAgents?: boolean; // Use agents with different roles/temperatures (default: false)
 }
 
 /**

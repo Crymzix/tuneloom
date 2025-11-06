@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Tuneloom",
+    title: "tuneloom",
     description: "Quickly fine-tune language models with your own data.",
 };
 

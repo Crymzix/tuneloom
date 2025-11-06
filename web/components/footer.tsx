@@ -5,7 +5,7 @@ export function Footer() {
         <footer className="bg-blue-50/80 backdrop-blur-sm py-3 px-6 z-50">
             <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-600">
                 <div className="flex items-center space-x-1">
-                    <span>&copy; {new Date().getFullYear()} Tuneloom.</span>
+                    <span>&copy; {new Date().getFullYear()} tuneloom.</span>
                     <span className="hidden sm:inline">All rights reserved.</span>
                 </div>
                 <div className="flex items-center space-x-2">

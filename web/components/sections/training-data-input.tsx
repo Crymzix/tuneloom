@@ -2,22 +2,24 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { useCompletion } from '@ai-sdk/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Plus, Trash2, UploadIcon, SparklesIcon, Loader2, DownloadIcon, CheckCircle2, CloudUpload } from 'lucide-react'
+import { Plus, Trash2, UploadIcon, SparklesIcon, Loader2, DownloadIcon, CheckCircle2, CloudUpload, XCircleIcon, Settings2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Textarea } from '../ui/textarea'
+import { Slider } from '../ui/slider'
 import { interFont } from '../../lib/utils'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useModelStore } from '@/lib/store/model-store'
 import { Badge } from '../ui/badge'
-import { useTrainingData, useSaveTrainingData, TrainingDataRow } from '@/hooks/use-training-data'
+import { useTrainingData, useSaveTrainingData, useGenerateTrainingData, TrainingDataRow } from '@/hooks/use-training-data'
 import { useDebounce } from '@/hooks/use-debounce'
 import { useRecaptcha } from '@/contexts/recaptcha-context'
+import { motion } from 'framer-motion'
+import { Switch } from '../ui/switch'
 
 function TrainingDataInput() {
     const { selectedModel } = useModelStore()
@@ -33,14 +35,23 @@ function TrainingDataInput() {
     const [isGeneratePromptDialogOpen, setIsGeneratePromptDialogOpen] = useState(false)
     const [generationPrompt, setGenerationPrompt] = useState('')
 
+    // Agentic pipeline parameters
+    const [useAgenticPipeline, setUseAgenticPipeline] = useState(false)
+    const [numExamples, setNumExamples] = useState(100)
+    const [numAgents, setNumAgents] = useState(10)
+    const [diverseAgents, setDiverseAgents] = useState(true)
+
     const fileInputRef = useRef<HTMLInputElement>(null)
     const scrollAreaRef = useRef<HTMLDivElement>(null)
     const hasInitializedRef = useRef(false)
     const { executeRecaptcha } = useRecaptcha()
 
-    const { complete, completion, isLoading } = useCompletion({
-        api: '/api/generate-training-data',
-    })
+    const {
+        mutate: generateData,
+        isPending: isLoading,
+        error,
+        data: generatedData
+    } = useGenerateTrainingData()
 
     const debouncedRows = useDebounce(rows, 1000)
 
@@ -100,37 +111,26 @@ function TrainingDataInput() {
     }, [saveStatus])
 
     useEffect(() => {
-        if (!isLoading && completion) {
-            setGeneratedData()
-        }
-    }, [completion, isLoading])
+        if (generatedData && generatedData.length > 0) {
+            // Process generated data
+            const newRows: TrainingDataRow[] = generatedData.map((item) => ({
+                input: item.input || '',
+                output: item.output || ''
+            }))
 
-    const setGeneratedData = () => {
-        try {
-            const generatedData = JSON.parse(completion)
-            // Validate and transform the data
-            if (Array.isArray(generatedData)) {
-                const newRows: TrainingDataRow[] = generatedData.map((item) => ({
-                    input: item.input || '',
-                    output: item.output || ''
-                }))
-
-                // Clear existing rows if they are empty
-                const hasEmptyRows = rows.every(row => !row.input && !row.output)
-                if (hasEmptyRows) {
-                    setRows(newRows)
-                } else {
-                    setRows([...rows, ...newRows])
-                }
-                setIsGeneratePromptDialogOpen(false)
-                toast.success('Training data generated', {
-                    description: `Successfully generated ${newRows.length} training examples`
-                })
+            // Clear existing rows if they are empty
+            const hasEmptyRows = rows.every(row => !row.input && !row.output)
+            if (hasEmptyRows) {
+                setRows(newRows)
+            } else {
+                setRows([...rows, ...newRows])
             }
-        } catch (parseError) {
-            // No-op: Invalid JSON
+            setIsGeneratePromptDialogOpen(false)
+            toast.success('Training data generated', {
+                description: `Successfully generated ${newRows.length} training examples`
+            })
         }
-    }
+    }, [generatedData])
 
     const handleInputChange = (index: number, field: 'input' | 'output', value: string) => {
         setRows(rows.map((row, i) =>
@@ -225,18 +225,21 @@ function TrainingDataInput() {
             return;
         }
 
-        try {
-            await complete(generationPrompt, {
-                body: {
-                    recaptchaToken,
-                }
-            })
-        } catch (error) {
-            console.error('Error generating training data:', error)
-            toast.error('Generation failed', {
-                description: 'Error generating training data. Please try again.'
-            })
-        }
+        generateData({
+            prompt: generationPrompt,
+            recaptchaToken,
+            useAgenticPipeline,
+            numExamples,
+            numAgents,
+            diverseAgents,
+        }, {
+            onError: (error) => {
+                console.error('Error generating training data:', error)
+                toast.error('Generation failed', {
+                    description: error.message || 'Error generating training data. Please try again.'
+                })
+            }
+        })
     }
 
     const handleDownloadCSV = () => {
@@ -343,7 +346,7 @@ function TrainingDataInput() {
                                             Generate
                                         </Button>
                                         {
-                                            generationPrompt && completion && <div className='absolute size-3 -right-[1px] -top-[1px] bg-red-500 border-white border-1 rounded-full'></div>
+                                            generationPrompt && generatedData && <div className='absolute size-3 -right-[1px] -top-[1px] bg-red-500 border-white border-1 rounded-full'></div>
                                         }
                                     </div>
                                 </TooltipTrigger>
@@ -477,7 +480,7 @@ function TrainingDataInput() {
                         onOpenChange={setIsGeneratePromptDialogOpen}
                         open={isGeneratePromptDialogOpen}
                     >
-                        <DialogContent className="sm:max-w-[425px] shadow-none border-none">
+                        <DialogContent className="sm:max-w-[500px] shadow-none border-none">
                             <DialogHeader>
                                 <DialogTitle>Generate Training Data</DialogTitle>
                                 <DialogDescription className='text-xs'>
@@ -498,6 +501,113 @@ function TrainingDataInput() {
                                         }
                                     }}
                                 />
+
+                                {/* Agentic Pipeline Controls */}
+                                <div className="space-y-4 pt-2 border-t">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <div className="text-sm font-medium flex items-center gap-2">
+                                                <Settings2 className="size-4" />
+                                                Agentic Pipeline
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                Use multiple AI agents to generate more data faster
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            checked={useAgenticPipeline}
+                                            onCheckedChange={setUseAgenticPipeline}
+                                            disabled={isLoading}
+                                            className='data-[state=checked]:bg-blue-400'
+                                        />
+                                    </div>
+
+                                    {useAgenticPipeline && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: "auto" }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            className="space-y-4 pl-6 border-l-2 border-blue-200"
+                                        >
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-sm font-medium">
+                                                        Number of Examples
+                                                    </label>
+                                                    <span className="text-sm text-muted-foreground">{numExamples}</span>
+                                                </div>
+                                                <Slider
+                                                    value={[numExamples]}
+                                                    onValueChange={(value) => setNumExamples(value[0])}
+                                                    min={10}
+                                                    max={500}
+                                                    step={10}
+                                                    disabled={isLoading}
+                                                    className="w-full"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Total (approximate) training examples to generate
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-sm font-medium">
+                                                        Number of Agents
+                                                    </label>
+                                                    <span className="text-sm text-muted-foreground">{numAgents}</span>
+                                                </div>
+                                                <Slider
+                                                    value={[numAgents]}
+                                                    onValueChange={(value) => setNumAgents(value[0])}
+                                                    min={1}
+                                                    max={50}
+                                                    step={1}
+                                                    disabled={isLoading}
+                                                    className="w-full"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Parallel agents working simultaneously
+                                                </p>
+                                            </div>
+
+                                            <div className="flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <label className="text-sm font-medium">
+                                                        Diverse Agents
+                                                    </label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Use agents with different roles for more variety
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={diverseAgents}
+                                                    onCheckedChange={setDiverseAgents}
+                                                    disabled={isLoading}
+                                                    className='data-[state=checked]:bg-blue-400'
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </div>
+
+                                {
+                                    error && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="flex gap-3 items-start"
+                                        >
+                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-red-100 rounded-lg text-red-800">
+                                                <XCircleIcon className="size-4 flex-shrink-0" />
+                                                <div className="flex flex-col gap-1">
+                                                    <p className="font-medium text-xs">Error occurred</p>
+                                                    <p className="text-xs">{error.message}</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )
+                                }
                             </div>
                             <DialogFooter>
                                 <DialogClose asChild>
@@ -517,7 +627,7 @@ function TrainingDataInput() {
                                     disabled={isLoading}
                                 >
                                     {isLoading && <Loader2 className='animate-spin mr-2' />}
-                                    {isLoading ? 'Generating...' : rows.length > 0 && completion ? 'Generate More' : 'Generate'}
+                                    {isLoading ? 'Generating...' : rows.length > 0 && generatedData ? 'Generate More' : 'Generate'}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>

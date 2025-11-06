@@ -10,6 +10,15 @@ export interface TrainingDataRow {
     output: string
 }
 
+export interface GenerateTrainingDataParams {
+    prompt: string
+    recaptchaToken?: string
+    numExamples?: number
+    numAgents?: number
+    useAgenticPipeline?: boolean
+    diverseAgents?: boolean
+}
+
 /**
  * Hook to load training data for the selected model
  * Tries GCS first for authenticated users, falls back to IndexedDB
@@ -98,6 +107,37 @@ export function useSaveTrainingData() {
         },
         onError: (error) => {
             console.error('Failed to save training data:', error)
+        },
+    })
+}
+
+/**
+ * Hook to generate training data using AI
+ * Makes a POST request to /api/generate-training-data
+ */
+export function useGenerateTrainingData() {
+    const { user } = useAuth()
+
+    return useMutation({
+        mutationFn: async (params: GenerateTrainingDataParams) => {
+            const token = await user?.getIdToken()
+
+            const response = await fetch('/api/generate-training-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(params),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.message || 'Failed to generate training data')
+            }
+
+            const data = await response.json()
+            return data as TrainingDataRow[]
         },
     })
 }

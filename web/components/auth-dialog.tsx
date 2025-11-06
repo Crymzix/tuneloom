@@ -13,6 +13,7 @@ import { GoogleAuthProvider, linkWithPopup, signInWithCredential, signInWithPopu
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/contexts/auth-context";
 import { useModelStore } from "../lib/store";
+import { AnimatedLinePath } from "./ui/animated-line-path";
 
 interface AuthDialogProps {
     open: boolean;
@@ -93,7 +94,7 @@ export function AuthDialog({ open, onOpenChange, onSignInSuccess }: AuthDialogPr
             <DialogContent className="sm:min-w-md shadow-none border-none">
                 <DialogHeader>
                     <DialogTitle>
-                        <div className="flex items-center gap-2 mb-6">
+                        <div className="flex items-center gap-2">
                             <h3 className="text-lg font-semibold">Sign in to start fine-tuning</h3>
                             {
                                 _hasHydrated && (
@@ -106,11 +107,12 @@ export function AuthDialog({ open, onOpenChange, onSignInSuccess }: AuthDialogPr
                         </div>
                     </DialogTitle>
                     <DialogDescription>
+                        You need to sign in before you can start fine-tuning.
                         Sign in with your Google account to save your progress and access your data across devices.
                     </DialogDescription>
                 </DialogHeader>
-
-                <div className="flex flex-col gap-4 py-4">
+                <div className="flex flex-col justify-center items-center gap-6">
+                    <div className="w-full h-[1px] bg-border"></div>
                     <Button
                         onClick={handleGoogleSignIn}
                         disabled={isLoading}

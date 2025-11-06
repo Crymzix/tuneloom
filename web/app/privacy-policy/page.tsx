@@ -4,8 +4,8 @@ import { Footer } from "@/components/footer";
 import { ArrowLeftIcon } from "lucide-react";
 
 export const metadata: Metadata = {
-    title: "Privacy Policy - Tuneloom",
-    description: "Privacy policy for Tuneloom",
+    title: "Privacy Policy - tuneloom",
+    description: "Privacy policy for tuneloom",
 };
 
 export default function PrivacyPolicy() {
@@ -33,7 +33,7 @@ export default function PrivacyPolicy() {
                             1. Introduction
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            Welcome to Tuneloom. We respect your privacy and are committed to protecting your personal data. This privacy policy explains how we collect, use, and safeguard your information when you use our platform to fine-tune and host custom language models.
+                            Welcome to tuneloom. We respect your privacy and are committed to protecting your personal data. This privacy policy explains how we collect, use, and safeguard your information when you use our platform to fine-tune and host custom language models.
                         </p>
                     </section>
 

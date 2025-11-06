@@ -21,17 +21,30 @@ export const schemas = {
             })
         ).min(1, 'At least one message is required'),
         apiKey: z.string().optional(),
-    }).loose(), // Allow extra fields
+    }).loose(),
 
     completionRequest: z.object({
         modelId: z.string().min(1, 'Model ID is required'),
         prompt: z.string().min(1, 'Prompt is required'),
         apiKey: z.string().optional(),
-    }).loose(), // Allow extra fields
+    }).loose(),
 
     trainingDataRequest: z.object({
         prompt: z.string().min(10, 'Prompt must be at least 10 characters long')
             .max(5000, 'Prompt cannot exceed 5000 characters'),
+        recaptchaToken: z.string().optional(),
+        numExamples: z.number()
+            .int('Number of examples must be an integer')
+            .min(1, 'Must generate at least 1 example')
+            .max(1000, 'Cannot generate more than 1000 examples')
+            .optional(),
+        numAgents: z.number()
+            .int('Number of agents must be an integer')
+            .min(1, 'Must use at least 1 agent')
+            .max(50, 'Cannot use more than 50 agents')
+            .optional(),
+        useAgenticPipeline: z.boolean().optional(),
+        diverseAgents: z.boolean().optional(),
     }).loose(),
 
     startFineTuneRequest: z.object({
