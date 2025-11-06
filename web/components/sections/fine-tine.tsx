@@ -1,18 +1,14 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { interFont } from "../../lib/utils"
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import {
     Play,
     Loader2,
     CheckCircle2,
     AlertCircle,
-    Copy,
-    Eye,
-    EyeOff,
     XCircle,
     XIcon
 } from 'lucide-react'
@@ -20,10 +16,10 @@ import { useModelStore } from '../../lib/store'
 import { useAuth } from '../../contexts/auth-context'
 import { AuthDialog } from '../auth-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { useCheckModelName, useStartFineTune, useUserJobs, useUserModelsByBaseModel, useGetApiKey } from '../../hooks/use-fine-tune'
+import { useCheckModelName, useStartFineTune, useUserJobs, useUserModelsByBaseModel } from '../../hooks/use-fine-tune'
 import { useDebounce } from '../../hooks/use-debounce'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence } from 'motion/react'
 import { FineTuneSettings } from '../fine-tune-settings'
 import SlidingTabs from '../ui/sliding-tab'
 import { FineTuneJobs } from '../fine-tune-jobs'
@@ -31,6 +27,7 @@ import { Versions } from '../versions'
 import { useRecaptcha } from '../../contexts/recaptcha-context'
 import { toast } from 'sonner'
 import { Footer } from '../footer'
+import { ApiEndpoint } from '../api-endpoint'
 
 const fineTuneTabs = [
     { id: 'fine-tune-jobs', label: 'Fine-tune Jobs' },
@@ -49,10 +46,6 @@ interface FineTuneConfig {
 function FineTune() {
     const { user } = useAuth()
     const [modelName, setModelName] = useState('')
-    const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
-    const [copiedApiKey, setCopiedApiKey] = useState<string | null>(null)
-    const [showApiKey, setShowApiKey] = useState<boolean>(false)
-    const [pendingCopy, setPendingCopy] = useState<boolean>(false)
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false)
     const [activeTab, setActiveTab] = useState<string>('fine-tune-jobs')
     const [fineTuneConfig, setFineTuneConfig] = useState<FineTuneConfig>({
@@ -77,11 +70,6 @@ function FineTune() {
 
     const { data: userModels = [] } = useUserModelsByBaseModel(
         selectedModel?.hf_id || ''
-    )
-
-    const { data: apiKeyData, isFetching: isFetchingApiKey } = useGetApiKey(
-        selectedUserModel?.apiKeyId,
-        showApiKey && !!selectedUserModel?.apiKeyId
     )
 
     const startFineTuneMutation = useStartFineTune()
@@ -172,63 +160,6 @@ function FineTune() {
 
         return { modelNameStatus: 'idle' as const, modelNameError: '' }
     }, [modelName, debouncedModelName, isCheckingModelName, modelNameCheck, modelNameCheckError])
-
-    useEffect(() => {
-        if (pendingCopy && apiKeyData?.keySecret && !isFetchingApiKey) {
-            navigator.clipboard.writeText(apiKeyData.keySecret)
-            setCopiedApiKey(selectedUserModel?.id || null)
-            setTimeout(() => setCopiedApiKey(null), 2000)
-            setPendingCopy(false)
-        }
-    }, [pendingCopy, apiKeyData, isFetchingApiKey, selectedUserModel?.id])
-
-    const handleCopyUrl = (url: string) => {
-        navigator.clipboard.writeText(url)
-        setCopiedUrl(url)
-        setTimeout(() => setCopiedUrl(null), 2000)
-    }
-
-    const handleCopyApiKey = async () => {
-        if (!selectedUserModel?.apiKeyId) {
-            return
-        }
-
-        if (apiKeyData?.keySecret) {
-            navigator.clipboard.writeText(apiKeyData.keySecret)
-            setCopiedApiKey(selectedUserModel.id)
-            setTimeout(() => setCopiedApiKey(null), 2000)
-        } else {
-            setPendingCopy(true)
-            setShowApiKey(true)
-        }
-    }
-
-    const toggleApiKeyVisibility = () => {
-        setShowApiKey(!showApiKey)
-    }
-
-    const maskApiKey = (apiKey: string) => {
-        if (!apiKey) {
-            return ''
-        }
-        return `sk_${'•'.repeat(24)}`
-    }
-
-    const getApiKeyDisplay = () => {
-        if (!selectedUserModel?.apiKeyId) return ''
-
-        if (showApiKey) {
-            if (isFetchingApiKey) {
-                return 'Loading...'
-            }
-            if (apiKeyData?.keySecret) {
-                return apiKeyData.keySecret
-            }
-            return 'Failed to load'
-        }
-
-        return maskApiKey(selectedUserModel.apiKeyId)
-    }
 
     const canStartFineTune = () => {
         if (selectedUserModel) {
@@ -407,104 +338,7 @@ function FineTune() {
                                         {/* Model URL and API Key */}
                                         <AnimatePresence>
                                             {selectedUserModel?.inferenceUrl && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, height: 0 }}
-                                                    animate={{ opacity: 1, height: 'auto' }}
-                                                    exit={{ opacity: 0, height: 0 }}
-                                                    transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                                    className="space-y-4"
-                                                >
-                                                    {/* API Endpoint */}
-                                                    <div className="space-y-2">
-                                                        <p className="text-xs font-medium text-muted-foreground">
-                                                            API Endpoint
-                                                        </p>
-                                                        <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
-                                                            <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                {`${process.env.NEXT_PUBLIC_INFERENCE_URL}/v1/${selectedUserModel?.name || ''}`}
-                                                            </code>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon-sm"
-                                                                        className="size-7 hover:bg-slate-700"
-                                                                        onClick={() => handleCopyUrl(selectedUserModel?.inferenceUrl || '')}
-                                                                    >
-                                                                        {copiedUrl === selectedUserModel?.inferenceUrl ? (
-                                                                            <CheckCircle2 className="size-3 text-green-400" />
-                                                                        ) : (
-                                                                            <Copy className="size-3 text-slate-300" />
-                                                                        )}
-                                                                    </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="bottom">
-                                                                    {copiedUrl === selectedUserModel?.inferenceUrl ? 'Copied!' : 'Copy URL'}
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* API Key */}
-                                                    {selectedUserModel?.apiKeyId && (
-                                                        <div className="space-y-2">
-                                                            <p className="text-xs font-medium text-muted-foreground">
-                                                                API Key
-                                                            </p>
-                                                            <div className="flex items-center gap-2 p-3 bg-slate-800 border border-slate-700 rounded-md">
-                                                                <code className="text-xs font-mono text-white flex-1 truncate">
-                                                                    {getApiKeyDisplay()}
-                                                                </code>
-                                                                <div className="flex gap-1">
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon-sm"
-                                                                                className="size-7 hover:bg-slate-700"
-                                                                                onClick={() => toggleApiKeyVisibility()}
-                                                                                disabled={isFetchingApiKey}
-                                                                            >
-                                                                                {showApiKey ? (
-                                                                                    <EyeOff className="size-3 text-slate-300" />
-                                                                                ) : (
-                                                                                    <Eye className="size-3 text-slate-300" />
-                                                                                )}
-                                                                            </Button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="bottom">
-                                                                            {showApiKey ? 'Hide' : 'Show'} API key
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon-sm"
-                                                                                className="size-7 hover:bg-slate-700"
-                                                                                onClick={() => handleCopyApiKey()}
-                                                                                disabled={isFetchingApiKey}
-                                                                            >
-                                                                                {copiedApiKey === selectedUserModel?.id ? (
-                                                                                    <CheckCircle2 className="size-3 text-green-400" />
-                                                                                ) : (
-                                                                                    <Copy className="size-3 text-slate-300" />
-                                                                                )}
-                                                                            </Button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="bottom">
-                                                                            {copiedApiKey === selectedUserModel?.id ? 'Copied!' : 'Copy API key'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    <p className="text-xs text-muted-foreground">
-                                                        This model is compatible with any OpenAI SDK. Keep your API key secure.
-                                                    </p>
-                                                </motion.div>
+                                                <ApiEndpoint />
                                             )}
                                         </AnimatePresence>
                                     </>
@@ -513,14 +347,7 @@ function FineTune() {
                                 <AnimatePresence>
                                     {
                                         (selectedUserModel || modelName) && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                            >
-                                                <FineTuneSettings config={fineTuneConfig} setConfig={setFineTuneConfig} />
-                                            </motion.div>
+                                            <FineTuneSettings config={fineTuneConfig} setConfig={setFineTuneConfig} />
                                         )
                                     }
                                 </AnimatePresence>

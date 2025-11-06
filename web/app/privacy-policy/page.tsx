@@ -172,7 +172,7 @@ export default function PrivacyPolicy() {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                            10. Children's Privacy
+                            10. Children&apos;s Privacy
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
                             Our service is not intended for users under 18 years of age. We do not knowingly collect personal information from children.
@@ -184,7 +184,7 @@ export default function PrivacyPolicy() {
                             11. Changes to This Policy
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            We may update this privacy policy from time to time. We will notify you of any material changes by posting the new policy on this page and updating the "Last Updated" date.
+                            We may update this privacy policy from time to time. We will notify you of any material changes by posting the new policy on this page and updating the &quot;Last Updated&quot; date.
                         </p>
                     </section>
 

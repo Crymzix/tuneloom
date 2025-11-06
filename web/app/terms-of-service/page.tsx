@@ -33,7 +33,7 @@ export default function TermsOfService() {
                             1. Acceptance of Terms
                         </h2>
                         <p className="text-gray-700 leading-relaxed">
-                            By accessing or using tuneloom ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, please do not use our Service. These Terms constitute a legally binding agreement between you and tuneloom.
+                            By accessing or using tuneloom (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;). If you do not agree to these Terms, please do not use our Service. These Terms constitute a legally binding agreement between you and tuneloom.
                         </p>
                     </section>
 
@@ -233,7 +233,7 @@ export default function TermsOfService() {
                             11. Disclaimers and Warranties
                         </h2>
                         <p className="text-gray-700 leading-relaxed mb-3">
-                            THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND. WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING:
+                            THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND. WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING:
                         </p>
                         <ul className="list-disc pl-6 text-gray-700 space-y-2">
                             <li>Merchantability and fitness for a particular purpose</li>
