@@ -10,6 +10,7 @@ import { errorHandler } from '../middleware/error-handler';
 import { API_CONFIG } from '../config/constants';
 import { authMiddleware } from '../middleware/auth';
 import { validateRequest, validateQuery, schemas } from '../middleware/validation';
+import { rateLimitMiddleware, RateLimitPresets } from '../middleware/rate-limit';
 import { setGlobalDispatcher, Agent } from 'undici';
 
 // Workaround for Vercel Workflow long-running steps in local development
@@ -28,13 +29,17 @@ app.onError(errorHandler);
  * Health check endpoint
  * GET /api/health
  */
-app.get('/health', (c) => {
-    return c.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        service: 'modelsmith-api',
-    });
-});
+app.get(
+    '/health',
+    rateLimitMiddleware(RateLimitPresets.generous),
+    (c) => {
+        return c.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            service: 'modelsmith-api',
+        });
+    }
+);
 
 /**
  * Chat endpoint
@@ -44,6 +49,7 @@ app.get('/health', (c) => {
 app.post(
     '/chat',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.streaming),
     validateRequest(schemas.chatRequest),
     ChatController.streamChat
 );
@@ -56,6 +62,7 @@ app.post(
 app.post(
     '/completion',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.streaming),
     validateRequest(schemas.completionRequest),
     CompletionController.streamCompletion
 );
@@ -68,6 +75,7 @@ app.post(
 app.post(
     '/generate-training-data',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.trainingData),
     validateRequest(schemas.trainingDataRequest),
     TrainingDataController.generateTrainingData
 );
@@ -80,6 +88,7 @@ app.post(
 app.post(
     '/fine-tune/start',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.fineTune),
     validateRequest(schemas.startFineTuneRequest),
     FineTuneController.startFineTune
 );
@@ -92,6 +101,7 @@ app.post(
 app.get(
     '/fine-tune/api-key/:keyId',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.moderate),
     FineTuneController.getApiKey
 );
 
@@ -103,42 +113,9 @@ app.get(
 app.get(
     '/check-model-name',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.moderate),
     validateQuery(schemas.checkModelNameQuery),
     ModelNameController.checkModelName
-);
-
-/**
- * Model version endpoints
- */
-
-/**
- * List all versions for a model
- * GET /api/models/:modelId/versions
- */
-app.get(
-    '/models/:modelId/versions',
-    authMiddleware,
-    ModelVersionsController.listVersions
-);
-
-/**
- * Get active version for a model
- * GET /api/models/:modelId/active-version
- */
-app.get(
-    '/models/:modelId/active-version',
-    authMiddleware,
-    ModelVersionsController.getActiveVersion
-);
-
-/**
- * Get a specific version
- * GET /api/models/:modelId/versions/:versionId
- */
-app.get(
-    '/models/:modelId/versions/:versionId',
-    authMiddleware,
-    ModelVersionsController.getVersion
 );
 
 /**
@@ -148,6 +125,7 @@ app.get(
 app.post(
     '/models/:modelId/versions/:versionId/activate',
     authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.moderate),
     ModelVersionsController.activateVersion
 );
 
