@@ -71,13 +71,6 @@ export const modelGroups = [
                 "license": "Apache 2.0",
                 "type": "General"
             },
-            {
-                "name": "Qwen3 8B",
-                "hf_id": "Qwen/Qwen3-8B",
-                "params": "8B",
-                "license": "Apache 2.0",
-                "type": "General"
-            }
         ]
     },
     {
@@ -87,13 +80,6 @@ export const modelGroups = [
             {
                 "name": "Phi-4 Mini Instruct",
                 "hf_id": "microsoft/Phi-4-mini-instruct",
-                "params": "4B",
-                "license": "MIT",
-                "type": "General"
-            },
-            {
-                "name": "Phi-4 Mini Flash Reasoning",
-                "hf_id": "microsoft/Phi-4-mini-flash-reasoning",
                 "params": "4B",
                 "license": "MIT",
                 "type": "General"
@@ -123,13 +109,26 @@ export const modelGroups = [
                 "params": "1.5B",
                 "license": "DeepSeek License",
                 "type": "Code"
+            }
+        ]
+    },
+    {
+        "company_name": "IBM",
+        "company_logo": "/logos/ibm.png",
+        "models": [
+            {
+                "name": "Granite-4.0-H-350M",
+                "hf_id": "ibm-granite/granite-4.0-h-350m",
+                "params": "350M",
+                "license": "Apache 2.0",
+                "type": "Code"
             },
             {
-                "name": "DeepSeek R1 Distill Qwen 7B",
-                "hf_id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-                "params": "7B",
-                "license": "DeepSeek License",
-                "type": "General"
+                "name": "Granite-4.0-H-1B",
+                "hf_id": "ibm-granite/granite-4.0-h-1b",
+                "params": "1B",
+                "license": "Apache 2.0",
+                "type": "Code"
             }
         ]
     }

@@ -49,7 +49,7 @@ function FineTuneJobs() {
                 {jobs.map((job, index) => (
                     <div
                         key={job.id}
-                        className={`p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === jobs.length - 1 ? '' : ''
+                        className={`p-4 sm:p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === jobs.length - 1 ? '' : ''
                             }`}
                     >
                         <div className="flex items-start justify-between gap-4">

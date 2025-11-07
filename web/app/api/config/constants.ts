@@ -90,4 +90,7 @@ export const MODEL_IDS = {
     DEEPSEEK_R1_DISTILL_QWEN_1_5B: "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
     DEEPSEEK_R1_DISTILL_QWEN_7B: "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
 
+    // IBM
+    GRANITE_4_0_H_350M: "ibm-granite/granite-4.0-h-350m",
+    GRANITE_4_0_H_1B: "ibm-granite/granite-4.0-h-1b",
 } as const;

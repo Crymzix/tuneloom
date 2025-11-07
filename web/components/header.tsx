@@ -12,7 +12,12 @@ function Header() {
 
     return (
         <header className="fixed top-0 w-full z-40 pointer-events-none">
-            <div className="flex px-6 py-4 items-center gap-2 justify-end">
+            <div className="flex sm:hidden px-6 py-4 items-center gap-2 justify-end">
+                <div className="flex items-center pointer-events-auto">
+                    <img src="/logo.svg" alt="tuneloom" className="size-8 object-contain" />
+                </div>
+            </div>
+            <div className="hidden sm:flex px-6 py-4 items-center gap-2 justify-end">
                 <div className="flex items-center pointer-events-auto">
                     <img src="/logo.svg" alt="tuneloom" className="size-9 mr-2 object-contain" />
                     <div className={`${pacificoFont.className} text-3xl font-medium text-blue-400`}>

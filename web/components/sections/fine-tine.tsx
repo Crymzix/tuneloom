@@ -220,24 +220,24 @@ function FineTune() {
 
     return (
         <div id="fine-tune" className="min-h-screen w-screen flex flex-col relative">
-            <div className="sticky top-0 z-30">
+            <div className="sticky top-0 z-30 bg-gradient-to-b from-blue-50">
                 <div className={`${interFont.className} px-6 py-4`}>
-                    <h2 className="text-2xl font-semibold">Start Fine-tuning</h2>
+                    <h2 className="text-lg sm:text-2xl font-semibold">Start Fine-tuning</h2>
                 </div>
             </div>
 
             {/* Main content */}
             <div className="flex-1 flex items-center justify-center overflow-hidden">
                 <div className="w-full max-w-5xl px-6 py-8 z-20">
-                    <div className="space-y-8 pr-4">
+                    <div className="space-y-8">
                         {/* Start New Fine-tune Section */}
-                        <div className="rounded-lg bg-background shadow-sm p-6">
+                        <div className="rounded-lg bg-background shadow-sm p-4 sm:p-6">
                             <div className="flex items-center gap-2 mb-6">
-                                <h3 className="text-lg font-semibold">Fine-tune on</h3>
+                                <h3 className="text-sm sm:text-lg font-semibold">Fine-tune on</h3>
                                 {
                                     _hasHydrated && (
-                                        <div className="flex items-center text-lg font-semibold">
-                                            <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-5 mr-1 object-contain rounded" />
+                                        <div className="flex items-center text-sm sm:text-lg font-semibold">
+                                            <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-4 sm:size-5 mr-1 object-contain rounded" />
                                             {selectedModel.name}
                                         </div>
                                     )
@@ -410,7 +410,7 @@ function FineTune() {
                         </div>
 
                         <div className="rounded-lg bg-background shadow-sm overflow-hidden">
-                            <div className="p-6 border-b flex items-center justify-between">
+                            <div className="p-4 sm:p-6 border-b flex items-center justify-between">
                                 <SlidingTabs
                                     tabs={fineTuneTabs}
                                     activeTab={activeTab}

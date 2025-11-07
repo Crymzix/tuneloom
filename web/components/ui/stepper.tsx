@@ -36,7 +36,7 @@ export function Stepper({ steps, className }: StepperProps) {
     return (
         <div
             className={cn(
-                "fixed left-8 top-1/2 -translate-y-1/2 z-50",
+                "hidden sm:block fixed left-8 top-1/2 -translate-y-1/2 z-50",
                 className
             )}
         >

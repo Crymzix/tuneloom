@@ -288,13 +288,13 @@ function TrainingDataInput() {
         <div id="training-data-input" className="h-screen w-screen flex flex-col relative">
             <div className="absolute top-0 z-10 w-full bg-transparent">
                 <div className={`${interFont.className} px-6 py-4`}>
-                    <h2 className="text-2xl font-semibold">Training Data</h2>
+                    <h2 className="text-lg sm:text-2xl font-semibold">Training Data</h2>
                 </div>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center relative">
-                <div className="w-full max-w-4xl px-6 flex flex-col max-h-screen z-20 py-8">
-                    <div className="mb-6 flex items-center flex-shrink-0">
+                <div className="w-full max-w-4xl px-6 py-12 sm:px-6 sm:py-8 flex flex-col max-h-screen z-20">
+                    <div className="mb-6 flex items-center flex-shrink-0 flex-wrap gap-3">
                         <div className="flex items-center gap-3">
                             {
                                 dataCount > 0 &&
@@ -325,7 +325,7 @@ function TrainingDataInput() {
                                 </div>
                             )}
                         </div>
-                        <div className="flex gap-2 ml-auto">
+                        <div className="flex gap-2 sm:ml-auto flex-wrap">
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -444,7 +444,7 @@ function TrainingDataInput() {
                                                         value={row.input}
                                                         onChange={(e) => handleInputChange(virtualRow.index, 'input', e.target.value)}
                                                         placeholder="Enter input text..."
-                                                        className="w-full shadow-none bg-blue-50 border-none"
+                                                        className="w-full text-sm sm:text-md shadow-none bg-blue-50 border-none"
                                                     />
                                                 </div>
                                                 <div className="w-[45%] p-2">
@@ -452,7 +452,7 @@ function TrainingDataInput() {
                                                         value={row.output}
                                                         onChange={(e) => handleInputChange(virtualRow.index, 'output', e.target.value)}
                                                         placeholder="Enter expected output..."
-                                                        className="w-full shadow-none bg-blue-50 border-none"
+                                                        className="w-full text-sm sm:text-md shadow-none bg-blue-50 border-none"
                                                     />
                                                 </div>
                                                 <div className="w-[10%] p-2 flex items-center justify-center">
@@ -462,7 +462,7 @@ function TrainingDataInput() {
                                                         onClick={() => handleDeleteRow(virtualRow.index)}
                                                         disabled={rows.length === 1}
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
+                                                        <Trash2 className="size-3 sm:size-4" />
                                                     </Button>
                                                 </div>
                                             </div>

@@ -1,24 +1,31 @@
 # tuneloom
 
-A production-ready SaaS platform for fine-tuning and deploying language models with GPU acceleration. Built on Google Cloud Platform with serverless architecture for cost-effective scaling.
+A production-ready SaaS platform for fine-tuning and deploying language models
+with GPU acceleration. Built on Google Cloud Platform with serverless
+architecture for cost-effective scaling.
 
 ## Overview
 
-**tuneloom** enables users to fine-tune language models on custom datasets and deploy them for inference through an OpenAI-compatible API. The platform handles the complete lifecycle from training data generation to model deployment and serving.
+**tuneloom** enables users to fine-tune language models on custom datasets and
+deploy them for inference through an OpenAI-compatible API. The platform handles
+the complete lifecycle from training data generation to model deployment and
+serving.
 
 ## Architecture
 
 ### System Components
 
-tuneloom consists of three main services:
+**tuneloom** consists of three main services:
 
 #### 1. Web Application ([web/](web/))
 
 **Technology**: Next.js 15.5.5 with TypeScript, React 19
 
-**Purpose**: User-facing web application for managing fine-tuning jobs and model inference
+**Purpose**: User-facing web application for managing fine-tuning jobs and model
+inference
 
 **Key Features**:
+
 - Firebase Authentication for user management
 - Training data generation using Google Gemini API
 - Fine-tuning job creation and monitoring
@@ -26,9 +33,9 @@ tuneloom consists of three main services:
 - API key management for model access
 - Rate limiting with Upstash Redis
 
-**API Framework**: Hono 4.10.2 for API routes with Vercel AI SDK integration
+**Backend**: Vercel Functions with Hono 4.10.2 for REST API communication
 
-**State Management**: Zustand with React Query for server state
+**State Management**: Zustand for client state, React Query for server state, Firebase Authentication for auth
 
 #### 2. Fine-Tune Service ([fine-tune-service/](fine-tune-service/))
 
@@ -37,15 +44,16 @@ tuneloom consists of three main services:
 **Purpose**: GPU-accelerated model fine-tuning as Cloud Run Jobs
 
 **Key Features**:
+
 - QLoRA (4-bit quantization) for memory-efficient training
 - LoRA adapter training for parameter-efficient fine-tuning
 - Multiple training data formats (text, chat, instruction)
-- Weights & Biases integration for experiment tracking
 - Automatic model merging and upload to GCS
+- GCS mounted as volume for fast model loading
 
-**GPU**: NVIDIA L4 (24GB VRAM) with CUDA 12.1
+**GPU**: NVIDIA L4 (32GB VRAM) with CUDA 12.1
 
-**Deployment**: Cloud Run Jobs with automatic scaling to zero
+**Deployment**: Cloud Run Jobs with automatic scaling to zero and GCS volume mount
 
 #### 3. Inference Service ([inference-service/](inference-service/))
 
@@ -54,23 +62,24 @@ tuneloom consists of three main services:
 **Purpose**: Serves fine-tuned models with OpenAI-compatible API
 
 **Key Features**:
+
 - OpenAI API compatibility for chat and completion endpoints
-- LRU model caching with configurable memory limits
+- Loads base model and dynamically loads user-specific LoRA adapters
+- In-memory LRU cache for adapters to optimize inference performance
+- GCS mounted as volume for fast model loading
 - Streaming response support
-- Smart device detection (CUDA/MPS/CPU)
-- 8-bit quantization support for CPU inference
-- Firestore authentication for API keys
+- Firestore-based API key authentication
 
-**GPU**: NVIDIA L4 (24GB VRAM) with CUDA 12.1
+**GPU**: NVIDIA L4 (32GB VRAM) with CUDA 12.1
 
-**Deployment**: Cloud Run Service with GPU support
+**Deployment**: Cloud Run Service with GPU support and GCS volume mount
 
 ### Data Flow
 
 #### Training Flow
 
 1. User uploads or generates training data via web interface
-2. Training data stored in Firebase Storage
+2. Training data stored in Firebase Storage (Google Cloud Storage)
 3. User initiates fine-tuning job with configuration
 4. Vercel Workflow triggers Cloud Run Job
 5. Cloud Run Job:
@@ -84,40 +93,49 @@ tuneloom consists of three main services:
 #### Inference Flow
 
 1. User or API client sends request to web application
-2. Web application forwards to Inference Service
+2. Web application forwards to Inference Service via REST API
 3. Inference Service:
    - Validates API key via Firestore
-   - Loads model from GCS (with caching)
+   - Loads base model from GCS volume mount (if not cached)
+   - Loads user-specific LoRA adapters (cached in LRU cache)
    - Generates response using GPU
    - Streams tokens back to client
 4. Response displayed in web interface or returned to API client
 
+The inference service uses an in-memory LRU cache for adapters and mounts GCS as a volume for fast model access, enabling quick inference with limited resources.
+
+Note: Users can run inference directly if they have an API endpoint and valid API Key.
+
 ## Technology Stack
 
 ### Frontend
+
 - **Framework**: Next.js 15.5.5 (React 19.1.0)
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4 with Radix UI components
 - **State Management**: Zustand, React Query
-- **Forms**: React Hook Form with Zod validation
 - **AI SDK**: Vercel AI SDK for streaming inference
 - **Authentication**: Firebase Auth
 
-### Backend Services
-- **Language**: Python 3.10
-- **Web Framework**: FastAPI (Inference), Hono (Web API)
+### Backend
+
+- **Web API**: Vercel Functions with Hono for REST API
+- **GPU Services**: 2 Python 3.10 services on Cloud Run with NVIDIA L4 GPUs
+  - Inference Service: FastAPI for model serving
+  - Fine-Tune Service: PyTorch training with LoRA/QLoRA
 - **ML Framework**: PyTorch 2.5.1
 - **Model Hub**: HuggingFace Transformers 4.49.0
 - **Fine-tuning**: PEFT 0.13.0 (LoRA), TRL 0.7.0
 - **Quantization**: bitsandbytes for 4-bit/8-bit quantization
 
 ### Infrastructure
+
 - **Cloud Platform**: Google Cloud Platform
-- **Compute**: Cloud Run with GPU (NVIDIA L4)
-- **Storage**: Google Cloud Storage, Firebase Storage
-- **Database**: Firebase Firestore
-- **Cache**: Upstash Redis (rate limiting)
-- **Workflow**: Vercel Workflow for job orchestration
+- **Compute**: 2 Cloud Run services with GPU (NVIDIA L4) and GCS volume mounts
+- **Storage**: Google Cloud Storage (models, adapters, training data)
+- **Database**: Firebase Firestore (models, model versions, API keys, fine-tune jobs)
+- **Cache**: Upstash Redis (rate limiting), In-memory LRU (adapter caching)
+- **Workflow**: Vercel Workflow for long-running fine-tuning tasks
 - **Container Registry**: Google Artifact Registry
 
 ## Getting Started
@@ -143,7 +161,19 @@ npm run dev
 
 The application will be available at http://localhost:1011
 
-#### 2. Inference Service
+#### 2. Save base models into GCS
+
+In order to do fine-tuning you need to download the base models from HuggingFace
+and upload them into GCS. In this way, the inference-service and
+fine-tune-service can read the base models from GCS.
+
+```
+cd inference-service/scripts
+pip install -r requirements.txt
+python download_model_to_gcs.py --model-id "google/gemma-3-270m"
+```
+
+#### 3. Inference Service
 
 ```bash
 cd inference-service
@@ -151,16 +181,18 @@ pip install -r requirements.txt
 python inference-server.py
 ```
 
-See [inference-service/README.md](inference-service/README.md) for detailed setup.
+See [inference-service/README.md](inference-service/README.md) for detailed
+setup.
 
-#### 3. Fine-Tune Service
+#### 4. Fine-Tune Service
 
 ```bash
 cd fine-tune-service
 ./deploy.sh  # Deploy to Cloud Run Jobs
 ```
 
-See [fine-tune-service/README.md](fine-tune-service/README.md) for detailed configuration.
+See [fine-tune-service/README.md](fine-tune-service/README.md) for detailed
+configuration.
 
 ## Environment Configuration
 
@@ -196,21 +228,23 @@ RECAPTCHA_SECRET_KEY=your-recaptcha-secret
 GCS_BUCKET=your-models-bucket
 GCS_MODEL_PREFIX=models/
 LOCAL_MODEL_CACHE=/tmp/model_cache
-MAX_CACHED_MODELS=2
 ```
 
 ### Fine-Tune Service
 
-Configured via command-line arguments when executing Cloud Run Jobs. See [fine-tune-service/README.md](fine-tune-service/README.md) for details.
+Configured via command-line arguments when executing Cloud Run Jobs. See
+[fine-tune-service/README.md](fine-tune-service/README.md) for details.
 
 ## Key Features
 
 ### Training Data Generation
+
 - AI-powered training data generation using Google Gemini
 - Multiple data format support (text, chat, instruction)
 - Dataset preview and editing
 
 ### Model Fine-Tuning
+
 - Parameter-efficient fine-tuning with LoRA/QLoRA
 - Memory-efficient 4-bit quantization
 - Configurable hyperparameters
@@ -218,6 +252,7 @@ Configured via command-line arguments when executing Cloud Run Jobs. See [fine-t
 - Cost-effective GPU usage (pay per use)
 
 ### Model Deployment
+
 - Automatic model versioning
 - OpenAI-compatible API
 - Streaming responses
@@ -225,37 +260,37 @@ Configured via command-line arguments when executing Cloud Run Jobs. See [fine-t
 - Rate limiting
 
 ### User Management
+
 - Firebase Authentication
 - Per-user model isolation
 - API key management
-- Usage tracking
 
 ## Cost Optimization
 
 ### Serverless Architecture
+
 - Cloud Run scales to zero when idle
 - Pay only for actual compute time
 - GPU billing per second
 
 ### Memory Efficiency
-- QLoRA 4-bit quantization reduces memory by 75%
-- LRU model caching minimizes storage costs
-- Efficient adapter-only storage
 
-### Typical Costs
-- Fine-tuning job: $0.50 - $1.00 (30-60 minutes)
-- Inference: ~$0.80/hour for active GPU time
-- Storage: $0.02/GB/month for models
+- QLoRA 4-bit quantization reduces memory footprint by 75%
+- GCS mounted as volumes in Cloud Run for fast model loading without downloads
+- In-memory LRU cache for user adapters enables quick inference
+- Efficient adapter-only storage (LoRA adapters are typically <100MB vs multi-GB full models)
 
 ## Security
 
 ### Authentication & Authorization
+
 - Firebase Authentication for user identity
 - API key authentication for model access
 - Firestore security rules for data isolation
 - Rate limiting to prevent abuse
 
 ### Data Protection
+
 - Encrypted API keys at rest
 - Secure communication over HTTPS
 - GCS access control with service accounts
@@ -291,23 +326,28 @@ modelsmith/
 Each service can be developed independently:
 
 - **Web**: Standard Next.js development workflow
-- **Inference Service**: Run locally with CPU or test against deployed GPU instance
+- **Inference Service**: Run locally with CPU or test against deployed GPU
+  instance
 - **Fine-Tune Service**: Deploy to Cloud Run Jobs for GPU access
 
 ## Deployment
 
 ### Web Application
-- Deploy to Vercel, Cloud Run, or any Node.js hosting
+
+- Deploy to Vercel (unfortunately since we are use Workflows, this can only be
+  deployed on Vercel as of now)
 - Configure environment variables
 - Set up Firebase project
 
 ### Inference Service
+
 ```bash
 cd inference-service
 ./deploy.sh
 ```
 
 ### Fine-Tune Service
+
 ```bash
 cd fine-tune-service
 ./deploy.sh
@@ -315,30 +355,10 @@ cd fine-tune-service
 
 See individual service READMEs for detailed deployment instructions.
 
-## Monitoring
-
-### Application Monitoring
-- Firebase Analytics for user behavior
-- Cloud Run metrics for service health
-- Firestore for job status tracking
-
-### Training Monitoring
-- Weights & Biases integration (optional)
-- Cloud Logging for training logs
-- Real-time job status updates
-
-### Inference Monitoring
-- Request/response logging
-- Model cache statistics
-- GPU utilization metrics
-
 ## Support
 
 For detailed documentation on each service:
+
 - [Web Application](web/README.md)
 - [Inference Service](inference-service/README.md)
 - [Fine-Tune Service](fine-tune-service/README.md)
-
-## License
-
-[Add your license information here]

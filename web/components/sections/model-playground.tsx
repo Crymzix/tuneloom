@@ -256,13 +256,13 @@ function ModelPlayground() {
     return (
         <div id="model-playground" className="h-screen w-screen flex flex-col relative">
             <div className="absolute top-0 left-0 right-0 z-30">
-                <div className={`${interFont.className} px-6 py-4 flex items-center gap-2`}>
-                    <h2 className="text-2xl font-semibold">Fine-tune</h2>
+                <div className={`${interFont.className} px-6 py-4 flex flex-nowrap items-center gap-2 mr-12 sm:mr-0`}>
+                    <h2 className="text-lg sm:text-2xl font-semibold whitespace-nowrap">Fine-tune</h2>
                     {
                         _hasHydrated && (
-                            <div className="flex items-center text-xl font-semibold">
-                                <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-5 mr-2 object-contain rounded" />
-                                {selectedModel.name}
+                            <div className="flex items-center text-md sm:text-xl font-semibold min-w-0 mr-0">
+                                <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-5 mr-2 object-contain rounded flex-shrink-0" />
+                                <span className="whitespace-nowrap overflow-hidden text-ellipsis">{selectedModel.name}</span>
                             </div>
                         )
                     }
@@ -276,19 +276,19 @@ function ModelPlayground() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: "easeOut" }}
-                        className="flex-1 relative w-xl mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm mt-16 shadow-xs"
+                        className="flex-1 relative max-w-xl mx-4 sm:mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm mt-16 shadow-xs"
                         style={{ maxHeight: chatInputHeight > 0 ? `calc(100vh - ${chatInputHeight + 96}px)` : '100vh' }}
                     >
                         <ScrollArea
-                            className="h-full mx-auto"
+                            className="h-full w-full"
                             viewportRef={scrollViewportRef}
                             onScrollChange={handleScrollChange}
                             fadingEdges={true}
                             fadingEdgeClassNameTop="h-16 bg-gradient-to-b from-blue-100 to-transparent"
                             fadingEdgeClassNameBottom="h-16 bg-gradient-to-t from-blue-100 to-transparent"
                         >
-                            <div className="flex flex-col w-full max-w-3xl pt-8 pb-8 px-4 mx-auto gap-4">
-                                {messages.map((message, index) => (
+                            <div className="flex flex-col w-full max-w-xl sm:w-xl pt-8 pb-8 px-4 mx-auto gap-4">
+                                {messages.filter((message) => message.role === 'user').map((message, index) => (
                                     <motion.div
                                         key={message.id}
                                         initial={{ opacity: 0, y: 10 }}
@@ -392,7 +392,7 @@ function ModelPlayground() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: "easeOut" }}
-                        className="absolute w-xl mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm left-1/2 -translate-x-1/2 shadow-xs"
+                        className="absolute max-w-xl mx-4 sm:mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm left-1/2 -translate-x-1/2 shadow-xs"
                         style={{
                             bottom: chatInputHeight > 0 ? `${chatInputHeight + 32}px` : '100px',
                             height: '300px',
@@ -400,7 +400,7 @@ function ModelPlayground() {
                         }}
                     >
                         <ScrollArea
-                            className="h-full mx-auto"
+                            className="h-full w-full mx-auto"
                             viewportRef={scrollViewportRef}
                             onScrollChange={handleScrollChange}
                             fadingEdges={true}
@@ -686,7 +686,7 @@ function ModelPlayground() {
                             }
                         }}
                     />
-                    <div className="px-3 py-2 flex items-center gap-2">
+                    <div className="px-3 py-2 flex sm:items-center gap-2">
                         <ModelSelector
                             onBaseModelChange={() => {
                                 setMessages([])
@@ -699,7 +699,7 @@ function ModelPlayground() {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="border-none h-9 flex items-center justify-center ml-auto"
+                            className="border-none h-9 flex self-end sm:self-center items-center justify-center ml-auto"
                             disabled={chatInput.trim() === "" || isLoading || isFetchingApiKey}
                             onClick={handleSendMessage}
                         >

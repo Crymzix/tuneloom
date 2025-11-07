@@ -31,7 +31,7 @@ function ModelSelector({
     )
 
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
             <Select
                 value={selectedModel.hf_id}
                 onValueChange={(value) => {
@@ -51,7 +51,7 @@ function ModelSelector({
                             className="focus-visible:border-none focus-visible:ring-none focus-visible:ring-[0px] relative bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border-none"
                         >
                             <img src={selectedModelCompany.company_logo} alt={selectedModelCompany.company_name} className="inline-block size-4 mr-2 object-contain" />
-                            {selectedModel.name}
+                            <div className="font-medium">{selectedModel.name}</div>
                             <BorderBeam duration={8} colorFrom="#60a5fa" colorTo="#dbeafe" size={60} borderWidth={2} />
                         </SelectTrigger>
                     )

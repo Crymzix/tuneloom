@@ -59,7 +59,7 @@ function Versions({ modelId }: VersionsProps) {
                 {versions.map((version, index) => (
                     <div
                         key={version.id}
-                        className={`group p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === versions.length - 1 ? '' : ''
+                        className={`group p-4 sm:p-6 first:border-none border-t hover:bg-muted/30 transition-colors ${index === versions.length - 1 ? '' : ''
                             }`}
                     >
                         <div className="flex items-start justify-between gap-4">

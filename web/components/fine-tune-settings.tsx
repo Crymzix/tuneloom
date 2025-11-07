@@ -216,13 +216,13 @@ function FineTuneSettings({ config, setConfig }: FineTuneSettingsProps) {
         <Accordion type="single" collapsible>
             <AccordionItem value="item-1">
                 <AccordionTrigger className="group">
-                    <div className="flex items-center gap-2 w-full">
+                    <div className="flex items-center gap-2 w-full flex-wrap">
                         <SpoolIcon className="size-4" />
                         <div className="group-hover:underline">Fine-tune Settings</div>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Badge
-                                    className='rounded-lg flex gap-1 bg-blue-400 text-white ml-auto'
+                                    className='rounded-lg flex gap-1 bg-blue-400 text-white sm:ml-auto'
                                     variant='secondary'
                                 >
                                     <TimerIcon />
@@ -241,7 +241,7 @@ function FineTuneSettings({ config, setConfig }: FineTuneSettingsProps) {
                 </AccordionTrigger>
                 <AccordionContent>
                     <div className="flex flex-col gap-1 mt-1">
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid sm:grid-cols-3 gap-4">
                             {(Object.entries(presets) as [PresetKey, PresetData][]).map(([key, preset]) => (
                                 <div
                                     key={key}
