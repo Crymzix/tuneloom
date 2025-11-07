@@ -19,35 +19,14 @@ resulting model back to GCS.
 
 ## Architecture
 
-```
-┌─────────────────────┐
-│   Training Data     │
-│   (GCS Bucket)      │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   Base Model        │
-│ (GCS or HF Hub)     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Cloud Run Job      │
-│  (L4 GPU)           │
-│  - Load data        │
-│  - Fine-tune        │
-│  - QLoRA/LoRA       │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Fine-tuned Model   │
-│  (GCS Bucket)       │
-│  - Adapter weights  │
-│  - Merged model     │
-└─────────────────────┘
-```
+The fine-tune service follows a pipeline architecture:
+
+1. **Training Data**: Loads JSONL training data from GCS bucket
+2. **Base Model**: Downloads base model from HuggingFace Hub or GCS
+3. **Training**: Fine-tunes using LoRA/QLoRA on Cloud Run Job with L4 GPU
+4. **Output**: Saves adapter weights and merged model to GCS bucket
+
+The service runs as a Cloud Run Job, providing automatic scaling to zero when not in use.
 
 ## Prerequisites
 
@@ -350,13 +329,7 @@ To speed up training:
 
 ### Custom Training Data Preprocessing
 
-Edit [fine_tune_job.py](fine_tune_job.py:238) to customize data preprocessing:
-
-```python
-def tokenize_function(examples):
-    # Your custom preprocessing here
-    pass
-```
+The training data preprocessing logic is located in [data_manager.py](data_manager.py). To customize preprocessing, modify the data loading and formatting functions in this module.
 
 ### Multi-GPU Training
 
@@ -411,11 +384,19 @@ response = client.chat.completions.create(
 
 ```
 fine-tune-service/
-├── fine_tune_job.py    # Main training script
+├── fine_tune_job.py    # Main entry point script
+├── __init__.py         # Package initialization
+├── __main__.py         # Module entry point
+├── config.py           # Configuration management
+├── data_manager.py     # Training data loading and preprocessing
+├── job_tracker.py      # Job status tracking
+├── model_manager.py    # Base model downloading and caching
+├── storage.py          # GCS integration for models and data
+├── trainer.py          # LoRA/QLoRA training logic
 ├── requirements.txt    # Python dependencies
 ├── Dockerfile          # Container image
-├── deploy.sh          # Deployment script
-└── README.md          # This file
+├── deploy.sh           # Deployment script
+└── README.md           # This file
 ```
 
 ## Security Best Practices

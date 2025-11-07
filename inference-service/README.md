@@ -31,20 +31,27 @@ inference-service/
 │   ├── core/                    # Core business logic
 │   │   ├── __init__.py
 │   │   ├── model_manager.py   # Model loading/caching
-│   │   └── inference_engine.py # Inference logic
+│   │   ├── inference_engine.py # Inference logic
+│   │   └── version_resolver.py # Model version resolution
 │   ├── utils/                   # Utilities
 │   │   ├── __init__.py
 │   │   ├── logging.py          # Logging setup
+│   │   ├── memory.py           # Memory management
 │   │   └── stopping_criteria.py # Custom stopping criteria
 │   └── api/                     # API routes
 │       ├── __init__.py
 │       ├── app.py              # FastAPI app setup
 │       ├── health.py           # Health/info endpoints
 │       ├── completions.py      # Completion endpoints
-│       └── admin.py            # Admin endpoints
+│       ├── admin.py            # Admin endpoints
+│       └── middleware/         # API middleware
+│           ├── __init__.py
+│           └── auth.py         # Authentication
 ├── inference-server.py          # Entry point (backward compatibility)
-├── requirements.txt
-└── README.md
+├── deploy.sh                    # Deployment script
+├── Dockerfile                   # Container image
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
 ```
 
 ## Installation

@@ -36,7 +36,7 @@ app.get(
         return c.json({
             status: 'ok',
             timestamp: new Date().toISOString(),
-            service: 'modelsmith-api',
+            service: 'tuneloom-api',
         });
     }
 );
