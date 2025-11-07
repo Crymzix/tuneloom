@@ -294,7 +294,7 @@ function ModelPlayground() {
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ duration: 0.3, delay: index * 0.1 }}
-                                        className={`flex gap-3 first:mt-8 last:mb-8 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                                        className={`flex gap-3 last:mb-8 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                                     >
                                         {/* Avatar */}
                                         {

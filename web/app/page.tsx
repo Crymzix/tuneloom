@@ -8,6 +8,7 @@ import { FineTune } from "../components/sections/fine-tine";
 import { Header } from "../components/header";
 import { LinePath } from "../components/ui/line-path";
 import { useScroll } from "../contexts/scroll-context";
+import { Tutorial } from "../components/tutorial";
 
 const steps = [
     { id: "model-playground", label: "Model" },
@@ -44,6 +45,7 @@ export default function Home() {
                 scrollYProgress={scrollProgress}
             />
             <LightRays reverse />
+            <Tutorial />
         </div>
     );
 }
