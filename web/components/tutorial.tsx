@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { pacificoFont } from "../lib/utils";
-import { title } from "process";
 
 const TUTORIAL_STEPS = [
     {
@@ -40,11 +39,25 @@ const TUTORIAL_STEPS = [
     }
 ];
 
-const TUTORIAL_STORAGE_KEY = "modelsmith_tutorial_completed";
+const TUTORIAL_STORAGE_KEY = "tutorial_completed";
 
 function Tutorial() {
     const [open, setOpen] = useState(false);
     const [currentStep, setCurrentStep] = useState(0);
+
+    useEffect(() => {
+        const tutorialCompleted = localStorage.getItem(TUTORIAL_STORAGE_KEY);
+        // Preload all tutorial videos in the background
+        if (!tutorialCompleted) {
+            TUTORIAL_STEPS.forEach((step) => {
+                const video = document.createElement('video');
+                video.src = step.videoUrl;
+                video.preload = 'auto';
+                video.muted = true;
+                video.load();
+            });
+        }
+    }, []);
 
     useEffect(() => {
         // Check if tutorial has been completed before
