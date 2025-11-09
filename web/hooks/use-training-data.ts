@@ -4,6 +4,7 @@ import { useModelStore } from '@/lib/store/model-store'
 import { saveTrainingData, loadTrainingData } from '@/lib/training-data-storage'
 import { syncTrainingDataToGCS, loadTrainingDataFromGCS } from '@/lib/training-data-sync'
 import { useRef, useEffect } from 'react'
+import { TrainingDataWorkflowResult } from '../app/api/types'
 
 export interface TrainingDataRow {
     input: string
@@ -137,7 +138,7 @@ export function useGenerateTrainingData() {
             }
 
             const data = await response.json()
-            return data as TrainingDataRow[]
+            return data as TrainingDataWorkflowResult
         },
     })
 }

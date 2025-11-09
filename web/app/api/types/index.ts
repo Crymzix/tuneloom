@@ -250,6 +250,19 @@ export interface StartFineTuneRequest {
 }
 
 /**
+ * Result type for the training data workflow
+ */
+export interface TrainingDataWorkflowResult {
+    examples: TrainingExample[];
+    metadata: {
+        totalGenerated: number;
+        afterDeduplication: number;
+        numAgentsUsed: number;
+        diverseAgents: boolean;
+    };
+}
+
+/**
  * Response for starting a fine-tune job
  */
 export interface StartFineTuneResponse {

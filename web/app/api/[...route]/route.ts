@@ -6,6 +6,7 @@ import { TrainingDataController } from '../controllers/training-data.controller'
 import { FineTuneController } from '../controllers/fine-tune.controller';
 import { ModelNameController } from '../controllers/model-name.controller';
 import { ModelVersionsController } from '../controllers/model-versions.controller';
+import { WorkflowStatusController } from '../controllers/workflow-status.controller';
 import { errorHandler } from '../middleware/error-handler';
 import { API_CONFIG } from '../config/constants';
 import { authMiddleware } from '../middleware/auth';
@@ -127,6 +128,18 @@ app.post(
     authMiddleware,
     rateLimitMiddleware(RateLimitPresets.moderate),
     ModelVersionsController.activateVersion
+);
+
+/**
+ * Check workflow status
+ * GET /api/workflows/status?runId=<runId>
+ * Check the status of a long-running workflow
+ */
+app.get(
+    '/workflows/status',
+    authMiddleware,
+    rateLimitMiddleware(RateLimitPresets.generous),
+    WorkflowStatusController.checkStatus
 );
 
 /**

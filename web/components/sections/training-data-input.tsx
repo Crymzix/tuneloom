@@ -50,7 +50,7 @@ function TrainingDataInput() {
         mutate: generateData,
         isPending: isLoading,
         error,
-        data: generatedData
+        data: generatedDataResult
     } = useGenerateTrainingData()
 
     const debouncedRows = useDebounce(rows, 1000)
@@ -111,9 +111,9 @@ function TrainingDataInput() {
     }, [saveStatus])
 
     useEffect(() => {
-        if (generatedData && generatedData.length > 0) {
+        if (generatedDataResult && generatedDataResult.examples.length > 0) {
             // Process generated data
-            const newRows: TrainingDataRow[] = generatedData.map((item) => ({
+            const newRows: TrainingDataRow[] = generatedDataResult.examples.map((item) => ({
                 input: item.input || '',
                 output: item.output || ''
             }))
@@ -130,7 +130,7 @@ function TrainingDataInput() {
                 description: `Successfully generated ${newRows.length} training examples`
             })
         }
-    }, [generatedData])
+    }, [generatedDataResult])
 
     const handleInputChange = (index: number, field: 'input' | 'output', value: string) => {
         setRows(rows.map((row, i) =>
@@ -346,7 +346,7 @@ function TrainingDataInput() {
                                             Generate
                                         </Button>
                                         {
-                                            generationPrompt && generatedData && <div className='absolute size-3 -right-[1px] -top-[1px] bg-red-500 border-white border-1 rounded-full'></div>
+                                            generationPrompt && generatedDataResult && <div className='absolute size-3 -right-[1px] -top-[1px] bg-red-500 border-white border-1 rounded-full'></div>
                                         }
                                     </div>
                                 </TooltipTrigger>
@@ -627,7 +627,7 @@ function TrainingDataInput() {
                                     disabled={isLoading}
                                 >
                                     {isLoading && <Loader2 className='animate-spin mr-2' />}
-                                    {isLoading ? 'Generating...' : rows.length > 0 && generatedData ? 'Generate More' : 'Generate'}
+                                    {isLoading ? 'Generating...' : rows.length > 0 && generatedDataResult ? 'Generate More' : 'Generate'}
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
