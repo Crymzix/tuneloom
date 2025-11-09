@@ -13,6 +13,8 @@ serving.
 
 ## Architecture
 
+![architecture diagram](architecture.png)
+
 ### System Components
 
 **tuneloom** consists of three main services:
