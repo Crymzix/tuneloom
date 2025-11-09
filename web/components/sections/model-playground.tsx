@@ -4,7 +4,7 @@ import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { ArrowDownIcon, InfoIcon, Loader2Icon, RotateCcwIcon, SendIcon, Settings2Icon, TrashIcon, User2Icon, XCircleIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { useChat, useCompletion } from '@ai-sdk/react';
+import { useChat, useCompletion } from '../../hooks/use-ai-sdk';
 import { motion, AnimatePresence } from "motion/react";
 import { ScrollArea } from "../ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
@@ -14,8 +14,6 @@ import { useModelStore } from "../../lib/store/model-store"
 import { useAuth } from "../../contexts/auth-context"
 import { ModelSelector } from "../model-selector"
 import { useGetApiKey } from "../../hooks/use-fine-tune"
-import { useRecaptcha } from "../../contexts/recaptcha-context"
-import { toast } from "sonner"
 import SlidingTabs from "../ui/sliding-tab"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Slider } from "../ui/slider"
@@ -56,7 +54,6 @@ function ModelPlayground() {
     const scrollViewportRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLDivElement>(null);
     const [chatInputHeight, setChatInputHeight] = useState(0);
-    const { executeRecaptcha } = useRecaptcha();
 
     const [temperature, setTemperature] = useState(DEFAULT_MODEL_SETTINGS.temperature);
     const [topP, setTopP] = useState(DEFAULT_MODEL_SETTINGS.topP);
@@ -114,14 +111,6 @@ function ModelPlayground() {
             return;
         }
 
-        const recaptchaToken = await executeRecaptcha();
-        if (!recaptchaToken) {
-            toast.error('reCAPTCHA verification failed', {
-                description: 'Please try again.'
-            });
-            return;
-        }
-
         const token = await user?.getIdToken();
 
         const modelSettings = {
@@ -134,15 +123,14 @@ function ModelPlayground() {
         };
 
         if (activeTab === 'chat') {
-            chatPrompt(recaptchaToken, token, modelSettings)
+            chatPrompt(token, modelSettings)
             setChatInput('');
         } else {
-            completePrompt(recaptchaToken, token, modelSettings)
+            completePrompt(token, modelSettings)
         }
     }
 
     const chatPrompt = (
-        recaptchaToken: string,
         token: string | undefined,
         modelSettings: {
             temperature: number,
@@ -163,7 +151,6 @@ function ModelPlayground() {
                 body: {
                     modelId: selectedUserModel.name,
                     apiKey: apiKeyData?.keySecret || '',
-                    recaptchaToken,
                     settings: modelSettings,
                 }
             });
@@ -176,7 +163,6 @@ function ModelPlayground() {
                 },
                 body: {
                     modelId: selectedModel.hf_id,
-                    recaptchaToken,
                     settings: modelSettings,
                 }
             });
@@ -184,7 +170,6 @@ function ModelPlayground() {
     }
 
     const completePrompt = async (
-        recaptchaToken: string,
         token: string | undefined,
         modelSettings: {
             temperature: number,
@@ -203,7 +188,6 @@ function ModelPlayground() {
                 body: {
                     modelId: selectedUserModel.name,
                     apiKey: apiKeyData?.keySecret || '',
-                    recaptchaToken,
                     settings: modelSettings,
                 }
             })
@@ -214,7 +198,6 @@ function ModelPlayground() {
                 },
                 body: {
                     modelId: selectedModel.hf_id,
-                    recaptchaToken,
                     settings: modelSettings,
                 }
             })
@@ -685,6 +668,7 @@ function ModelPlayground() {
                                 handleSendMessage();
                             }
                         }}
+                        disabled={isCompleting && activeTab === 'completion'}
                     />
                     <div className="px-3 py-2 flex sm:items-center gap-2">
                         <ModelSelector

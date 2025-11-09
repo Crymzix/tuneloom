@@ -14,6 +14,7 @@ import {
     ModelVersion,
 } from '@/app/api/types'
 import { useModelStore } from '../lib/store'
+import { useRecaptcha } from '@/contexts/recaptcha-context'
 
 interface CheckModelNameResponse {
     available: boolean
@@ -34,7 +35,6 @@ interface StartFineTuneRequest {
     modelId?: string
     baseModel: string
     settings?: FineTuneSettings
-    recaptchaToken?: string
 }
 
 interface StartFineTuneResponse {
@@ -269,11 +269,17 @@ export function useGetApiKey(keyId: string | undefined, enabled: boolean = false
 export function useStartFineTune() {
     const { user } = useAuth()
     const queryClient = useQueryClient()
+    const { executeRecaptcha } = useRecaptcha()
 
     return useMutation({
         mutationFn: async (request: StartFineTuneRequest) => {
             if (!user) {
                 throw new Error('User not authenticated')
+            }
+
+            const recaptchaToken = await executeRecaptcha()
+            if (!recaptchaToken) {
+                throw new Error('reCAPTCHA verification failed')
             }
 
             const token = await user.getIdToken()
@@ -283,7 +289,10 @@ export function useStartFineTune() {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify(request),
+                body: JSON.stringify({
+                    ...request,
+                    recaptchaToken,
+                }),
             })
 
             const data = await response.json()

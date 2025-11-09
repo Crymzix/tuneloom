@@ -24,8 +24,6 @@ import { FineTuneSettings } from '../fine-tune-settings'
 import SlidingTabs from '../ui/sliding-tab'
 import { FineTuneJobs } from '../fine-tune-jobs'
 import { Versions } from '../versions'
-import { useRecaptcha } from '../../contexts/recaptcha-context'
-import { toast } from 'sonner'
 import { Footer } from '../footer'
 import { ApiEndpoint } from '../api-endpoint'
 
@@ -56,7 +54,6 @@ function FineTune() {
         loraDropout: 0.05,
         batchSize: 4
     })
-    const { executeRecaptcha } = useRecaptcha()
     const {
         selectedModel,
         getSelectedModelCompany,
@@ -188,14 +185,6 @@ function FineTune() {
             return;
         }
 
-        const recaptchaToken = await executeRecaptcha();
-        if (!recaptchaToken) {
-            toast.error('reCAPTCHA verification failed', {
-                description: 'Please try again.'
-            });
-            return;
-        }
-
         startFineTuneMutation.mutate(
             {
                 modelName: selectedUserModel ? undefined : modelName,
@@ -208,7 +197,6 @@ function FineTune() {
                     loraAlpha: fineTuneConfig.loraAlpha,
                     loraDropout: fineTuneConfig.loraDropout,
                 },
-                recaptchaToken,
             },
             {
                 onSuccess: () => {

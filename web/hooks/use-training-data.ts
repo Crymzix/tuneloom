@@ -5,6 +5,7 @@ import { saveTrainingData, loadTrainingData } from '@/lib/training-data-storage'
 import { syncTrainingDataToGCS, loadTrainingDataFromGCS } from '@/lib/training-data-sync'
 import { useRef, useEffect } from 'react'
 import { TrainingDataWorkflowResult } from '../app/api/types'
+import { useRecaptcha } from '@/contexts/recaptcha-context'
 
 export interface TrainingDataRow {
     input: string
@@ -13,7 +14,6 @@ export interface TrainingDataRow {
 
 export interface GenerateTrainingDataParams {
     prompt: string
-    recaptchaToken?: string
     numExamples?: number
     numAgents?: number
     useAgenticPipeline?: boolean
@@ -118,9 +118,15 @@ export function useSaveTrainingData() {
  */
 export function useGenerateTrainingData() {
     const { user } = useAuth()
+    const { executeRecaptcha } = useRecaptcha()
 
     return useMutation({
         mutationFn: async (params: GenerateTrainingDataParams) => {
+            const recaptchaToken = await executeRecaptcha()
+            if (!recaptchaToken) {
+                throw new Error('reCAPTCHA verification failed')
+            }
+
             const token = await user?.getIdToken()
 
             const response = await fetch('/api/generate-training-data', {
@@ -129,7 +135,10 @@ export function useGenerateTrainingData() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
                 },
-                body: JSON.stringify(params),
+                body: JSON.stringify({
+                    ...params,
+                    recaptchaToken,
+                }),
             })
 
             if (!response.ok) {
