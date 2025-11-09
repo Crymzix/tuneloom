@@ -288,7 +288,7 @@ function ModelPlayground() {
                             fadingEdgeClassNameBottom="h-16 bg-gradient-to-t from-blue-100 to-transparent"
                         >
                             <div className="flex flex-col w-full max-w-xl sm:w-xl pt-8 pb-8 px-4 mx-auto gap-4">
-                                {messages.filter((message) => message.role === 'user').map((message, index) => (
+                                {messages.map((message, index) => (
                                     <motion.div
                                         key={message.id}
                                         initial={{ opacity: 0, y: 10 }}
