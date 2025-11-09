@@ -2,7 +2,7 @@ import { Context } from 'hono';
 import { generateText } from 'ai';
 import { googleProvider, MODELS } from '../config/providers';
 import { TRAINING_DATA_CONFIG, AGENT_ROLES } from '../config/constants';
-import { TrainingDataRequest, TrainingExample } from '../types';
+import { TrainingDataRequest, TrainingDataWorkflowResult, TrainingExample } from '../types';
 import { ApiError } from '../middleware/error-handler';
 import { requireRecaptcha } from '../utils/recaptcha';
 import { start } from 'workflow/api';
@@ -76,7 +76,15 @@ export class TrainingDataController {
             });
 
             const examples = parseExamples(result.text);
-            return Response.json(examples);
+            return Response.json({
+                examples,
+                metadata: {
+                    totalGenerated: examples.length,
+                    afterDeduplication: examples.length,
+                    numAgentsUsed: 0,
+                    diverseAgents: false
+                }
+            } as TrainingDataWorkflowResult);
         } catch (error) {
             console.error('Legacy generation error:', error);
             throw new ApiError(

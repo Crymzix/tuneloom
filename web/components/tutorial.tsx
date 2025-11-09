@@ -20,22 +20,22 @@ const TUTORIAL_STEPS = [
                 tuneloom
             </span></span>,
         description: "Select your base model to fine-tune and explore the model playground.",
-        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-1.mp4",
+        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-1b.mp4",
     },
     {
         title: "Add training data",
         description: "Create and manage your training data. Generate training data for your model quickly.",
-        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-2.mp4",
+        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-2b.mp4",
     },
     {
         title: "Fine-tune your model",
         description: "Easily fine-tune your model with just a few clicks and monitor the training process.",
-        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-3.mp4",
+        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-3b.mp4",
     },
     {
         title: "Model Playground",
         description: "Test and interact with your fine-tuned model in the model playground. Copy the API endpoint to integrate it into your applications.",
-        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-4.mp4",
+        videoUrl: "https://swjsmi9jbkwkt8fl.public.blob.vercel-storage.com/tuneloom-tutorial-4a.mp4",
     }
 ];
 
