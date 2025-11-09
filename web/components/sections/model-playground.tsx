@@ -392,7 +392,7 @@ function ModelPlayground() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: "easeOut" }}
-                        className="absolute max-w-xl mx-4 sm:mx-auto rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm left-1/2 -translate-x-1/2 shadow-xs"
+                        className="absolute w-[calc(100%-2rem)] sm:w-xl rounded-md overflow-hidden bg-blue-100 backdrop-blur-sm left-1/2 -translate-x-1/2 shadow-xs"
                         style={{
                             bottom: chatInputHeight > 0 ? `${chatInputHeight + 32}px` : '100px',
                             height: '300px',
