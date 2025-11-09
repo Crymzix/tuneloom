@@ -87,19 +87,6 @@ export const modelGroups = [
         ]
     },
     {
-        "company_name": "Mistral AI",
-        "company_logo": "/logos/mistral-ai.png",
-        "models": [
-            {
-                "name": "Mistral 7B Instruct v0.3",
-                "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
-                "params": "7B",
-                "license": "Apache 2.0",
-                "type": "General"
-            }
-        ]
-    },
-    {
         "company_name": "DeepSeek AI",
         "company_logo": "/logos/deepseek-com.png",
         "models": [

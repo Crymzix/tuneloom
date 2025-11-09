@@ -88,7 +88,7 @@ const presets: Presets = {
     }
 }
 
-type ModelSize = '270M' | '600M' | '1B' | '1.5B' | '3B' | '4B' | '7B' | '8B';
+type ModelSize = '270M' | '350M' | '600M' | '1B' | '1.5B' | '3B' | '4B' | '7B' | '8B';
 
 const MODEL_SPEEDS: Record<ModelSize, {
     speedWith4bit: number;
@@ -97,6 +97,7 @@ const MODEL_SPEEDS: Record<ModelSize, {
     memoryNoQuant: number
 }> = {
     '270M': { baseSpeed: 1.40, speedWith4bit: 1.20, memoryNoQuant: 4, memory4bit: 3 },
+    '350M': { baseSpeed: 1.60, speedWith4bit: 1.30, memoryNoQuant: 4.5, memory4bit: 3.5 },
     '600M': { baseSpeed: 2.60, speedWith4bit: 2.20, memoryNoQuant: 6, memory4bit: 4 },
     '1B': { baseSpeed: 3.40, speedWith4bit: 2.80, memoryNoQuant: 9, memory4bit: 5 },
     '1.5B': { baseSpeed: 4.60, speedWith4bit: 3.80, memoryNoQuant: 12, memory4bit: 7 },
