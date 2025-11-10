@@ -32,6 +32,9 @@ CPU="${CPU:-8}"  # 8 vCPUs for L4
 TIMEOUT="${TIMEOUT:-3600}"  # 1 hour default timeout
 MAX_RETRIES="${MAX_RETRIES:-0}"  # Don't retry by default
 
+# Webhook Configuration
+VERCEL_AUTOMATION_BYPASS_SECRET="${VERCEL_AUTOMATION_BYPASS_SECRET:-}"
+
 # Validate configuration
 if [ -z "$PROJECT_ID" ]; then
     echo -e "${RED}Error: PROJECT_ID is required${NC}"
@@ -142,6 +145,12 @@ else
     ACTION="create"
 fi
 
+# Build environment variables string
+ENV_VARS="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs"
+if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+    ENV_VARS="${ENV_VARS},VERCEL_AUTOMATION_BYPASS_SECRET=${VERCEL_AUTOMATION_BYPASS_SECRET}"
+fi
+
 gcloud run jobs ${ACTION} ${JOB_NAME} \
     --image=${IMAGE_URI} \
     --region=${REGION} \
@@ -153,8 +162,8 @@ gcloud run jobs ${ACTION} ${JOB_NAME} \
     --no-gpu-zonal-redundancy \
     --memory=${MEMORY} \
     --cpu=${CPU} \
-    --set-env-vars="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs" \
-    --add-volume="name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME}" \
+    --set-env-vars="${ENV_VARS}" \
+    --add-volume=name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME},mount-options="metadata-cache-ttl-secs=0;stat-cache-max-size-mb=-1;type-cache-max-size-mb=-1" \
     --add-volume-mount="volume=gcs-1,mount-path=/mnt/gcs"
 
 # Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
@@ -261,8 +270,6 @@ echo "  GPU: ~\$${HOURLY_COST}/hour (${GPU_TYPE} - ${VRAM} VRAM)"
 echo "  Charged only for job execution time"
 echo "  Timeout: $(($TIMEOUT / 60)) minutes (~\$$(echo "scale=2; $HOURLY_COST * $TIMEOUT / 3600" | bc))"
 echo ""
-echo -e "${YELLOW}Tip:${NC} Fine-tuning typically takes 30-60 minutes for small datasets"
-echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${YELLOW}Monitoring:${NC}"
 echo ""
@@ -272,26 +279,10 @@ echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${YELLOW}Advanced Options:${NC}"
 echo ""
-echo "  Enable W&B logging:"
-echo "  gcloud run jobs execute ${JOB_NAME} \\"
-echo "      --region=${REGION} \\"
-echo "      --args=\"--base-model=google/gemma-2-2b\" \\"
-echo "      --args=\"--output-model-name=my-model\" \\"
-echo "      --args=\"--training-data-path=training-data/dataset.jsonl\" \\"
-echo "      --args=\"--gcs-bucket=${BUCKET_NAME}\" \\"
-echo "      --args=\"--use-wandb\" \\"
-echo "      --args=\"--wandb-project=gemma-finetune\" \\"
-echo "      --set-env-vars=\"WANDB_API_KEY=your-key\""
-echo ""
 echo "  Adjust LoRA parameters:"
 echo "      --args=\"--lora-r=32\" \\"
 echo "      --args=\"--lora-alpha=64\" \\"
 echo "      --args=\"--lora-dropout=0.1\""
-echo ""
-echo "  Adjust training parameters:"
-echo "      --args=\"--per-device-train-batch-size=8\" \\"
-echo "      --args=\"--gradient-accumulation-steps=2\" \\"
-echo "      --args=\"--max-seq-length=1024\""
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""

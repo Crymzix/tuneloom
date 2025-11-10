@@ -149,8 +149,8 @@ gcloud run deploy ${SERVICE_NAME} \
     --port=8080 \
     --allow-unauthenticated \
     --set-env-vars="GCS_BUCKET=${BUCKET_NAME},GCS_MODEL_PREFIX=models/,MAX_CONCURRENT_REQUESTS=50,MOUNT_PATH=/mnt/gcs,BASE_MODEL_API_KEY=${BASE_MODEL_API_KEY}" \
-    --add-volume="name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME}" \
-    --add-volume-mount="volume=gcs-1,mount-path=/mnt/gcs"
+    --add-volume=name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME},mount-options="metadata-cache-ttl-secs=0;stat-cache-max-size-mb=-1;type-cache-max-size-mb=-1" \
+    --add-volume-mount=volume=gcs-1,mount-path=/mnt/gcs
 
 # Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
 # environment variable to enable direct file access instead of downloading from GCS:

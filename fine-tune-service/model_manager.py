@@ -130,6 +130,12 @@ class ModelManager:
             use_fast=True,
         )
 
+        # Handle processor objects (e.g., Gemma3Processor for instruction-tuned models)
+        # Processors wrap tokenizers and add chat templates/special formatting
+        if hasattr(tokenizer, 'tokenizer'):
+            logger.info(f"Detected processor object ({type(tokenizer).__name__}), extracting tokenizer")
+            tokenizer = tokenizer.tokenizer
+
         # Set pad token if not present
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token

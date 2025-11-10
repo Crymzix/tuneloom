@@ -107,6 +107,7 @@ class FineTuneJob:
             self.job_tracker.update_progress(0.4, "Training model")
             trainer = self.trainer.train(
                 model,
+                tokenizer,
                 dataset_splits["train"],
                 dataset_splits["test"],
                 lora_config,
@@ -182,11 +183,21 @@ class FineTuneJob:
             }
             json_data = json.dumps(payload).encode('utf-8')
 
+            # Prepare headers
+            headers = {
+                'Content-Type': 'application/json'
+            }
+
+            # Add Vercel protection bypass header if secret is configured
+            bypass_secret = os.getenv("VERCEL_AUTOMATION_BYPASS_SECRET")
+            if bypass_secret:
+                headers['x-vercel-protection-bypass'] = bypass_secret
+
             # Create and send request
             req = urllib_request.Request(
                 webhook_url,
                 data=json_data,
-                headers={'Content-Type': 'application/json'},
+                headers=headers,
                 method='POST'
             )
 

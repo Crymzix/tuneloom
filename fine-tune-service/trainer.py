@@ -152,6 +152,7 @@ class ModelTrainer:
     def train(
         self,
         model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
         train_dataset: Dataset,
         eval_dataset: Dataset,
         lora_config: LoraConfig,
@@ -161,6 +162,7 @@ class ModelTrainer:
 
         Args:
             model: Model to train
+            tokenizer: Tokenizer for the model
             train_dataset: Training dataset
             eval_dataset: Evaluation dataset
             lora_config: LoRA configuration
@@ -180,7 +182,7 @@ class ModelTrainer:
             logger.info("Progress tracking callback enabled")
 
         trainer = self._create_trainer(
-            model, train_dataset, eval_dataset, lora_config, training_args, callbacks
+            model, tokenizer, train_dataset, eval_dataset, lora_config, training_args, callbacks
         )
 
         logger.info("Starting training...")
@@ -249,6 +251,7 @@ class ModelTrainer:
     def _create_trainer(
         self,
         model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
         train_dataset: Dataset,
         eval_dataset: Dataset,
         lora_config: LoraConfig,
@@ -260,6 +263,7 @@ class ModelTrainer:
 
         Args:
             model: Model to train
+            tokenizer: Tokenizer for the model
             train_dataset: Training dataset
             eval_dataset: Evaluation dataset
             lora_config: LoRA configuration
@@ -275,6 +279,7 @@ class ModelTrainer:
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             peft_config=lora_config,
+            processing_class=tokenizer,
             callbacks=callbacks,
         )
 
