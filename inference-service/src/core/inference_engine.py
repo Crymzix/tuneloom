@@ -165,6 +165,38 @@ class InferenceEngine:
 
         return gen_kwargs
 
+    def _handle_cuda_error(self, model_data: dict, model_id: str) -> None:
+        """
+        Handle CUDA errors by cleaning up GPU memory and unloading the corrupted model.
+
+        CUDA errors can corrupt the GPU context, making it unusable for subsequent
+        operations. This method attempts recovery by:
+        1. Clearing CUDA cache
+        2. Unloading the affected model from memory
+        3. Forcing garbage collection
+
+        Args:
+            model_data: Model data dictionary
+            model_id: Model identifier to unload
+        """
+        try:
+            logger.warning(f"Handling CUDA error for model {model_id}")
+
+            # Clear CUDA cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.info("Cleared CUDA cache")
+
+            # Unload the corrupted model
+            import asyncio
+            loop = asyncio.get_event_loop()
+            loop.create_task(self.model_manager.unload_model(model_id))
+            logger.info(f"Scheduled unload of model {model_id}")
+
+        except Exception as e:
+            logger.error(f"Error during CUDA error handling: {e}", exc_info=True)
+
     async def generate_stream(
         self,
         model_data: dict,
@@ -205,86 +237,119 @@ class InferenceEngine:
         )
         gen_kwargs["streamer"] = streamer
 
-        # Start generation in thread
-        thread = Thread(target=model.generate, kwargs=gen_kwargs)
+        # Start generation in thread with error handling
+        generation_error = []  # Store any exception from the thread
+
+        def generate_with_error_handling():
+            """Wrapper to catch exceptions in generation thread."""
+            try:
+                model.generate(**gen_kwargs)
+            except Exception as e:
+                generation_error.append(e)
+                logger.error(f"Generation thread error: {e}", exc_info=True)
+                # Signal streamer to stop
+                streamer.end()
+
+        thread = Thread(target=generate_with_error_handling)
         thread.start()
 
-        # Stream tokens
+        # Stream tokens with timeout protection
         first_chunk = True
         accumulated_text = ""
         partial_stop_buffer = ""
 
-        for text in streamer:
-            # Add buffered partial stop token back if it wasn't a stop
-            if partial_stop_buffer:
-                text = partial_stop_buffer + text
-                partial_stop_buffer = ""
+        try:
+            for text in streamer:
+                # Add buffered partial stop token back if it wasn't a stop
+                if partial_stop_buffer:
+                    text = partial_stop_buffer + text
+                    partial_stop_buffer = ""
 
-            accumulated_text += text
-            current_chunk = text
+                accumulated_text += text
+                current_chunk = text
 
-            # Check if we've hit a complete stop string
-            should_stop = False
-            for stop_str in stop_strings:
-                if stop_str in accumulated_text:
-                    # Find where the stop string starts in accumulated text
-                    stop_pos = accumulated_text.index(stop_str)
-                    # Calculate how much of current chunk to keep
-                    keep_len = max(0, stop_pos - (len(accumulated_text) - len(text)))
-                    current_chunk = text[:keep_len]
-                    should_stop = True
-                    break
-
-            # Check if current text might be start of a stop string (partial match)
-            if not should_stop and stop_strings:
+                # Check if we've hit a complete stop string
+                should_stop = False
                 for stop_str in stop_strings:
-                    # Check if the end of accumulated_text matches the start of stop_str
-                    for i in range(1, min(len(stop_str), len(accumulated_text)) + 1):
-                        if accumulated_text.endswith(stop_str[:i]):
-                            # We have a partial match, buffer it and don't send yet
-                            buffer_size = i
-                            if len(current_chunk) >= buffer_size:
-                                partial_stop_buffer = current_chunk[-buffer_size:]
-                                current_chunk = current_chunk[:-buffer_size]
-                            break
-                    if partial_stop_buffer:
+                    if stop_str in accumulated_text:
+                        # Find where the stop string starts in accumulated text
+                        stop_pos = accumulated_text.index(stop_str)
+                        # Calculate how much of current chunk to keep
+                        keep_len = max(0, stop_pos - (len(accumulated_text) - len(text)))
+                        current_chunk = text[:keep_len]
+                        should_stop = True
                         break
 
-            # Only yield if we have text to send
-            if current_chunk:
-                chunk = ChatCompletionChunk(
-                    id=request_id,
-                    created=int(time.time()),
-                    model=request.model,
-                    choices=[
-                        StreamChoice(
-                            index=0,
-                            delta=(
-                                {"role": "assistant", "content": current_chunk}
-                                if first_chunk
-                                else {"content": current_chunk}
-                            ),
-                            finish_reason=None,
-                        )
-                    ],
-                )
-                first_chunk = False
-                yield f"data: {chunk.model_dump_json()}\n\n"
+                # Check if current text might be start of a stop string (partial match)
+                if not should_stop and stop_strings:
+                    for stop_str in stop_strings:
+                        # Check if the end of accumulated_text matches the start of stop_str
+                        for i in range(1, min(len(stop_str), len(accumulated_text)) + 1):
+                            if accumulated_text.endswith(stop_str[:i]):
+                                # We have a partial match, buffer it and don't send yet
+                                buffer_size = i
+                                if len(current_chunk) >= buffer_size:
+                                    partial_stop_buffer = current_chunk[-buffer_size:]
+                                    current_chunk = current_chunk[:-buffer_size]
+                                break
+                        if partial_stop_buffer:
+                            break
 
-            if should_stop:
-                break
+                # Only yield if we have text to send
+                if current_chunk:
+                    chunk = ChatCompletionChunk(
+                        id=request_id,
+                        created=int(time.time()),
+                        model=request.model,
+                        choices=[
+                            StreamChoice(
+                                index=0,
+                                delta=(
+                                    {"role": "assistant", "content": current_chunk}
+                                    if first_chunk
+                                    else {"content": current_chunk}
+                                ),
+                                finish_reason=None,
+                            )
+                        ],
+                    )
+                    first_chunk = False
+                    yield f"data: {chunk.model_dump_json()}\n\n"
 
-        # Final chunk
-        final = ChatCompletionChunk(
-            id=request_id,
-            created=int(time.time()),
-            model=request.model,
-            choices=[StreamChoice(index=0, delta={}, finish_reason="stop")],
-        )
-        yield f"data: {final.model_dump_json()}\n\n"
-        yield "data: [DONE]\n\n"
+                if should_stop:
+                    break
 
-        thread.join()
+            # Final chunk
+            final = ChatCompletionChunk(
+                id=request_id,
+                created=int(time.time()),
+                model=request.model,
+                choices=[StreamChoice(index=0, delta={}, finish_reason="stop")],
+            )
+            yield f"data: {final.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+
+        finally:
+            # Wait for thread to finish (with timeout)
+            thread.join(timeout=5.0)
+
+            # Check if generation thread had an error
+            if generation_error:
+                error = generation_error[0]
+                logger.error(f"Generation failed with error: {error}")
+
+                # If CUDA error, clear cache and potentially unload model
+                if "CUDA" in str(error) or "cuda" in str(error):
+                    logger.error("CUDA error detected - cleaning up GPU memory")
+                    self._handle_cuda_error(model_data, request.model)
+
+                # Re-raise the error
+                raise error
+
+            # Check if thread is still alive (timeout)
+            if thread.is_alive():
+                logger.error("Generation thread timeout - possible hang")
+                raise TimeoutError("Generation timed out")
 
     async def generate(
         self, request: ChatCompletionRequest, auth_context: dict = None
@@ -337,13 +402,20 @@ class InferenceEngine:
                 stop_strings = self._prepare_stop_sequences(request, tokenizer)
                 stop_token_sequences = self._encode_stop_sequences(stop_strings, tokenizer)
 
-                # Generation
+                # Generation with error handling
                 gen_kwargs = self._prepare_generation_kwargs(
                     inputs, request, tokenizer, stop_token_sequences
                 )
 
-                with torch.no_grad():
-                    outputs = model.generate(**gen_kwargs)
+                try:
+                    with torch.no_grad():
+                        outputs = model.generate(**gen_kwargs)
+                except RuntimeError as e:
+                    # Handle CUDA errors
+                    if "CUDA" in str(e) or "cuda" in str(e):
+                        logger.error(f"CUDA error during generation: {e}")
+                        self._handle_cuda_error(model_data, request.model)
+                    raise
 
                 # Decode
                 generated_ids = outputs[0][inputs.input_ids.shape[1] :]
@@ -413,33 +485,64 @@ class InferenceEngine:
         gen_kwargs = self._prepare_generation_kwargs(inputs, request, tokenizer)
         gen_kwargs["streamer"] = streamer
 
-        # Start generation in thread
-        thread = Thread(target=model.generate, kwargs=gen_kwargs)
+        # Start generation in thread with error handling
+        generation_error = []
+
+        def generate_with_error_handling():
+            """Wrapper to catch exceptions in generation thread."""
+            try:
+                model.generate(**gen_kwargs)
+            except Exception as e:
+                generation_error.append(e)
+                logger.error(f"Generation thread error: {e}", exc_info=True)
+                streamer.end()
+
+        thread = Thread(target=generate_with_error_handling)
         thread.start()
 
         # Stream tokens
-        for text in streamer:
-            chunk = CompletionChunk(
+        try:
+            for text in streamer:
+                chunk = CompletionChunk(
+                    id=request_id,
+                    created=int(time.time()),
+                    model=request.model,
+                    choices=[
+                        StreamCompletionChoice(index=0, text=text, finish_reason=None)
+                    ],
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
+
+            # Final chunk
+            final = CompletionChunk(
                 id=request_id,
                 created=int(time.time()),
                 model=request.model,
-                choices=[
-                    StreamCompletionChoice(index=0, text=text, finish_reason=None)
-                ],
+                choices=[StreamCompletionChoice(index=0, text="", finish_reason="stop")],
             )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+            yield f"data: {final.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
 
-        # Final chunk
-        final = CompletionChunk(
-            id=request_id,
-            created=int(time.time()),
-            model=request.model,
-            choices=[StreamCompletionChoice(index=0, text="", finish_reason="stop")],
-        )
-        yield f"data: {final.model_dump_json()}\n\n"
-        yield "data: [DONE]\n\n"
+        finally:
+            # Wait for thread to finish (with timeout)
+            thread.join(timeout=5.0)
 
-        thread.join()
+            # Check if generation thread had an error
+            if generation_error:
+                error = generation_error[0]
+                logger.error(f"Generation failed with error: {error}")
+
+                # If CUDA error, clean up
+                if "CUDA" in str(error) or "cuda" in str(error):
+                    logger.error("CUDA error detected - cleaning up GPU memory")
+                    self._handle_cuda_error(model_data, request.model)
+
+                raise error
+
+            # Check if thread is still alive (timeout)
+            if thread.is_alive():
+                logger.error("Generation thread timeout - possible hang")
+                raise TimeoutError("Generation timed out")
 
     async def complete(
         self, request: CompletionRequest, auth_context: dict = None
@@ -500,8 +603,15 @@ class InferenceEngine:
 
                 gen_kwargs = self._prepare_generation_kwargs(inputs, request, tokenizer)
 
-                with torch.no_grad():
-                    outputs = model.generate(**gen_kwargs)
+                try:
+                    with torch.no_grad():
+                        outputs = model.generate(**gen_kwargs)
+                except RuntimeError as e:
+                    # Handle CUDA errors
+                    if "CUDA" in str(e) or "cuda" in str(e):
+                        logger.error(f"CUDA error during generation: {e}")
+                        self._handle_cuda_error(model_data, request.model)
+                    raise
 
                 # Decode
                 generated_ids = outputs[0][inputs.input_ids.shape[1] :]

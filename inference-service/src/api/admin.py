@@ -1,14 +1,23 @@
 """Admin endpoints for service management."""
 
+import time
+import asyncio
 import torch
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Dict, Any
+from typing import Dict, Any, List
+from pydantic import BaseModel
 
 from ..config import config
 from ..core.model_manager import ModelManager
 from .middleware.auth import verify_api_key
 
 router = APIRouter()
+
+
+class PrewarmRequest(BaseModel):
+    """Request model for pre-warming models."""
+    model_ids: List[str]
+    parallel: bool = True  # Load models in parallel or sequentially
 
 
 def create_admin_router(model_manager: ModelManager) -> APIRouter:
@@ -53,7 +62,6 @@ def create_admin_router(model_manager: ModelManager) -> APIRouter:
             "loaded_models": model_manager.list_loaded_models(),
             "model_count": len(model_manager.list_loaded_models()),
             "max_concurrent_requests": config.MAX_CONCURRENT_REQUESTS,
-            "max_cached_models": config.MAX_CACHED_MODELS,
             "gcs_bucket": config.GCS_BUCKET,
         }
 
@@ -141,6 +149,87 @@ def create_admin_router(model_manager: ModelManager) -> APIRouter:
 
         return {
             **cache_stats,
+            "requestedBy": auth.get("userId")
+        }
+
+    @router.post("/admin/prewarm")
+    async def prewarm_models(
+        request: PrewarmRequest,
+        auth: Dict[str, Any] = Depends(verify_api_key)
+    ):
+        """
+        Pre-warm (pre-load) one or more models into memory.
+
+        This endpoint allows you to load models before they are needed,
+        reducing latency for the first inference request. Useful for:
+        - Warming up instances after deployment
+        - Loading frequently-used models during startup
+        - Preparing models during low-traffic periods
+
+        Args:
+            request: PrewarmRequest containing list of model IDs and load strategy
+                - model_ids: List of model identifiers to load
+                - parallel: If True, load models in parallel (default: True)
+
+        Returns:
+            Status for each model including load time and success/failure
+
+        Note: Requires authentication with BASE_MODEL_API_KEY.
+        """
+        start_time = time.time()
+        results = []
+
+        async def load_single_model(model_id: str) -> Dict[str, Any]:
+            """Load a single model and return its status."""
+            model_start = time.time()
+
+            # Strip slashes from model ID
+            normalized_model_id = model_id.replace("/", "-")
+
+            try:
+                await model_manager.load_model(normalized_model_id)
+                load_time = time.time() - model_start
+                return {
+                    "model_id": model_id,
+                    "normalized_model_id": normalized_model_id,
+                    "status": "success",
+                    "load_time_seconds": round(load_time, 2),
+                    "message": f"Model loaded successfully in {round(load_time, 2)}s"
+                }
+            except Exception as e:
+                load_time = time.time() - model_start
+                return {
+                    "model_id": model_id,
+                    "normalized_model_id": normalized_model_id,
+                    "status": "error",
+                    "load_time_seconds": round(load_time, 2),
+                    "error": str(e),
+                    "message": f"Failed to load model: {str(e)}"
+                }
+
+        # Load models based on strategy
+        if request.parallel:
+            # Load all models in parallel
+            tasks = [load_single_model(model_id) for model_id in request.model_ids]
+            results = await asyncio.gather(*tasks)
+        else:
+            # Load models sequentially
+            for model_id in request.model_ids:
+                result = await load_single_model(model_id)
+                results.append(result)
+
+        total_time = time.time() - start_time
+        success_count = sum(1 for r in results if r["status"] == "success")
+        error_count = len(results) - success_count
+
+        return {
+            "message": f"Pre-warming complete: {success_count} succeeded, {error_count} failed",
+            "total_time_seconds": round(total_time, 2),
+            "parallel": request.parallel,
+            "models_requested": len(request.model_ids),
+            "models_loaded": success_count,
+            "models_failed": error_count,
+            "results": results,
             "requestedBy": auth.get("userId")
         }
 

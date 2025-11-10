@@ -168,20 +168,54 @@ class ModelManager:
         """
         Check if directory contains valid model files.
 
+        Supports both single-file models and sharded models.
+
         Args:
             path: Directory path to check
 
         Returns:
             True if directory contains model files
         """
-        # Check for common model files
-        required_files = ["config.json"]
-        model_file_patterns = ["pytorch_model.bin", "model.safetensors", "pytorch_model.bin.index.json"]
+        # Check for config.json
+        has_config = os.path.exists(os.path.join(path, "config.json"))
 
-        has_config = any(os.path.exists(os.path.join(path, f)) for f in required_files)
-        has_weights = any(os.path.exists(os.path.join(path, f)) for f in model_file_patterns)
+        if not has_config:
+            logger.warning(f"Validation failed: config.json not found in {path}")
+            return False
 
-        return has_config and has_weights
+        # Check for model weight files (single-file or sharded)
+        try:
+            files = os.listdir(path)
+
+            # Single-file model patterns
+            single_file_patterns = ["pytorch_model.bin", "model.safetensors"]
+            has_single_file = any(f in files for f in single_file_patterns)
+
+            # Index file patterns (for sharded models)
+            index_patterns = ["pytorch_model.bin.index.json", "model.safetensors.index.json"]
+            has_index = any(f in files for f in index_patterns)
+
+            # Sharded model patterns (check if any files match the pattern)
+            has_sharded = any(
+                f.startswith("model-") and f.endswith(".safetensors") or
+                f.startswith("pytorch_model-") and f.endswith(".bin")
+                for f in files
+            )
+
+            has_weights = has_single_file or has_index or has_sharded
+
+            if not has_weights:
+                logger.warning(f"Validation failed: No model weight files found in {path}")
+                logger.warning(f"Directory contains {len(files)} files: {files[:20]}")
+                logger.warning(f"Expected single-file models, index files, or sharded models")
+            else:
+                logger.debug(f"Model validation passed for {path}")
+
+            return has_weights
+
+        except Exception as e:
+            logger.error(f"Failed to validate model directory {path}: {e}")
+            return False
 
     async def _download_from_gcs(self, model_id: str) -> str:
         """
