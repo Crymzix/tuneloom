@@ -10,6 +10,13 @@ export function Footer() {
                 </div>
                 <div className="flex items-center space-x-2">
                     <Link
+                        href="/faq"
+                        className="text-xs sm:text-md hover:text-white hover:bg-blue-200 rounded-xl px-2.5 py-1 transition-colors"
+                    >
+                        FAQ
+                    </Link>
+                    <span className="text-gray-300">|</span>
+                    <Link
                         href="/privacy-policy"
                         className="text-xs sm:text-md hover:text-white hover:bg-blue-200 rounded-xl px-2.5 py-1 transition-colors"
                     >

@@ -3,7 +3,7 @@
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { ArrowDownIcon, InfoIcon, Loader2Icon, RotateCcwIcon, SendIcon, Settings2Icon, TrashIcon, User2Icon, XCircleIcon } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useChat, useCompletion } from '../../hooks/use-ai-sdk';
 import { motion, AnimatePresence } from "motion/react";
 import { ScrollArea } from "../ui/scroll-area";
@@ -62,14 +62,7 @@ function ModelPlayground() {
     const [frequencyPenalty, setFrequencyPenalty] = useState(DEFAULT_MODEL_SETTINGS.frequencyPenalty);
     const [presencePenalty, setPresencePenalty] = useState(DEFAULT_MODEL_SETTINGS.presencePenalty);
 
-    const resetToDefaults = () => {
-        setTemperature(DEFAULT_MODEL_SETTINGS.temperature);
-        setTopP(DEFAULT_MODEL_SETTINGS.topP);
-        setTopK(DEFAULT_MODEL_SETTINGS.topK);
-        setMaxTokens(DEFAULT_MODEL_SETTINGS.maxTokens);
-        setFrequencyPenalty(DEFAULT_MODEL_SETTINGS.frequencyPenalty);
-        setPresencePenalty(DEFAULT_MODEL_SETTINGS.presencePenalty);
-    };
+    const hasMessages = messages.length > 0;
 
     const selectedModelCompany = getSelectedModelCompany()
 
@@ -77,6 +70,16 @@ function ModelPlayground() {
         selectedUserModel?.apiKeyId,
         !!selectedUserModel?.apiKeyId
     )
+
+    const userProfilePicture = useMemo(() => {
+        if (user?.photoURL) {
+            return user.photoURL;
+        } else if (user?.providerData && user.providerData.length > 0 && user.providerData[0].photoURL) {
+            return user.providerData[0].photoURL;
+        } else {
+            return null
+        }
+    }, [user])
 
     useEffect(() => {
         if (isAtBottom && messages.length > 0) {
@@ -105,6 +108,15 @@ function ModelPlayground() {
             resizeObserver.disconnect();
         };
     }, []);
+
+    const resetToDefaults = () => {
+        setTemperature(DEFAULT_MODEL_SETTINGS.temperature);
+        setTopP(DEFAULT_MODEL_SETTINGS.topP);
+        setTopK(DEFAULT_MODEL_SETTINGS.topK);
+        setMaxTokens(DEFAULT_MODEL_SETTINGS.maxTokens);
+        setFrequencyPenalty(DEFAULT_MODEL_SETTINGS.frequencyPenalty);
+        setPresencePenalty(DEFAULT_MODEL_SETTINGS.presencePenalty);
+    };
 
     const handleSendMessage = async () => {
         if (isLoading) {
@@ -234,8 +246,6 @@ function ModelPlayground() {
         }
     }
 
-    const hasMessages = messages.length > 0;
-
     return (
         <div id="model-playground" className="h-screen w-screen flex flex-col relative">
             <div className="absolute top-0 left-0 right-0 z-30">
@@ -283,7 +293,7 @@ function ModelPlayground() {
                                         {
                                             message.role === 'user' ?
                                                 <Avatar>
-                                                    <AvatarImage src={user?.photoURL || undefined} alt="User Avatar" />
+                                                    <AvatarImage src={userProfilePicture || undefined} alt="User Avatar" />
                                                     <AvatarFallback className="bg-gradient-to-tr from-blue-200 to-blue-400">
                                                         <User2Icon className="size-4" />
                                                     </AvatarFallback>

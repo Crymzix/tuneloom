@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/auth-context"
 import { pacificoFont } from "../lib/utils"
 import { AuthDialog } from "./auth-dialog"
 import { useState } from "react"
+import Link from "next/link"
 
 function Header() {
     const { user, signOut } = useAuth()
@@ -26,9 +27,11 @@ function Header() {
                 </div>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-blue-500 hover:bg-blue-100 pointer-events-auto">
-                            <InfoIcon />
-                        </Button>
+                        <Link href="/faq">
+                            <Button variant="ghost" size="icon" className="text-blue-500 hover:bg-blue-100 pointer-events-auto">
+                                <InfoIcon />
+                            </Button>
+                        </Link>
                     </TooltipTrigger>
                     <TooltipContent>
                         FAQ

@@ -3,7 +3,8 @@
         "origin": [
             "http://localhost:1011",
             "http://localhost:3000",
-            "https://your-production-domain.com"
+            "https://tuneloom.app",
+            "https://www.tuneloom.app"
         ],
         "method": [
             "GET",
