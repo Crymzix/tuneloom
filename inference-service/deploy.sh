@@ -137,6 +137,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --image=${IMAGE_URI} \
     --region=${REGION} \
     --platform=managed \
+    --execution-environment=gen2 \
     --gpu=${GPU_COUNT} \
     --gpu-type=${GPU_TYPE} \
     --memory=${MEMORY} \
@@ -147,13 +148,15 @@ gcloud run deploy ${SERVICE_NAME} \
     --min-instances=${MIN_INSTANCES} \
     --port=8080 \
     --allow-unauthenticated \
-    --set-env-vars="GCS_BUCKET=${BUCKET_NAME},GCS_MODEL_PREFIX=models/,MAX_CONCURRENT_REQUESTS=50,MOUNT_PATH=/mnt/gcs,BASE_MODEL_API_KEY=${BASE_MODEL_API_KEY}"
+    --set-env-vars="GCS_BUCKET=${BUCKET_NAME},GCS_MODEL_PREFIX=models/,MAX_CONCURRENT_REQUESTS=50,MOUNT_PATH=/mnt/gcs,BASE_MODEL_API_KEY=${BASE_MODEL_API_KEY}" \
+    --add-volume="name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME}" \
+    --add-volume-mount="volume=gcs-1,mount-path=/mnt/gcs"
 
 # Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
 # environment variable to enable direct file access instead of downloading from GCS:
 #   --update-env-vars="MOUNT_PATH=/mnt/gcs"
 #
-# This will significantly improve cold start times by reading models directly from
+# This will improve inference times by reading models directly from
 # the mounted volume. Configure volume mounts in Cloud Console:
 # https://docs.cloud.google.com/run/docs/configuring/services/cloud-storage-volume-mounts
 

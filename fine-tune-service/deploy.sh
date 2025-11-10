@@ -147,12 +147,15 @@ gcloud run jobs ${ACTION} ${JOB_NAME} \
     --region=${REGION} \
     --task-timeout=${TIMEOUT}s \
     --max-retries=${MAX_RETRIES} \
+    --execution-environment=gen2 \
     --gpu=${GPU_COUNT} \
     --gpu-type=${GPU_TYPE} \
     --no-gpu-zonal-redundancy \
     --memory=${MEMORY} \
     --cpu=${CPU} \
-    --set-env-vars="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs"
+    --set-env-vars="CLEANUP_CACHE=true,MOUNT_PATH=/mnt/gcs" \
+    --add-volume="name=gcs-1,type=cloud-storage,bucket=${BUCKET_NAME}" \
+    --add-volume-mount="volume=gcs-1,mount-path=/mnt/gcs"
 
 # Note: If you have mounted a GCS bucket volume via Cloud Console, set the MOUNT_PATH
 # environment variable to enable direct file access and writes:
