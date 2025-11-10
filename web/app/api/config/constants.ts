@@ -66,8 +66,8 @@ Focus on ambiguous cases, complex reasoning, boundary conditions, and examples t
 export const MODEL_IDS = {
     // Google
     GEMMA_3_270M: "google/gemma-3-270m",
-    GEMMA_3_1B: "google/gemma-3-1b",
-    GEMMA_3_4B: "google/gemma-3-4b",
+    GEMMA_3_1B: "google/gemma-3-1b-it",
+    GEMMA_3_4B: "google/gemma-3-4b-it",
 
     // Meta
     LLAMA_3_2_1B: "meta-llama/Llama-3.2-1B",
