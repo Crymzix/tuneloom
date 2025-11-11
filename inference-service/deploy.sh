@@ -30,7 +30,7 @@ GPU_COUNT="${GPU_COUNT:-1}"
 MEMORY="${MEMORY:-32Gi}"
 CPU="${CPU:-8}"
 MAX_INSTANCES="${MAX_INSTANCES:-10}"
-MIN_INSTANCES="${MIN_INSTANCES:-0}"  # Set to 0 to scale to zero
+MIN_INSTANCES="${MIN_INSTANCES:-1}"  # Set to 0 to scale to zero
 CONCURRENCY="${CONCURRENCY:-10}"  # Requests per instance
 
 # Validate configuration

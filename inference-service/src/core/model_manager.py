@@ -389,6 +389,8 @@ class ModelManager:
             if os.path.exists(mounted_adapter_path) and os.path.isdir(mounted_adapter_path):
                 logger.info(f"Found adapter in mounted volume: {mounted_adapter_path}")
                 return mounted_adapter_path
+            else:
+                logger.debug(f"No adapter found in mounted volume at: {mounted_adapter_path}")
 
         # Check local cache
         local_model_path = self._get_local_model_path(model_id)
@@ -540,13 +542,16 @@ class ModelManager:
 
         try:
             # Load adapter using PEFT
+            # IMPORTANT: Ensure adapter dtype matches base model dtype for numerical stability
+            # This prevents inf/nan issues during sampling, especially with Gemma models
             model_with_adapter = PeftModel.from_pretrained(
                 base_model,
                 adapter_path,
-                is_trainable=False  # For inference only
+                is_trainable=False,  # For inference only
+                torch_dtype=base_model.dtype,  # Match base model dtype (typically bfloat16)
             )
 
-            logger.info(f"Adapter applied successfully for {model_id}")
+            logger.info(f"Adapter applied successfully for {model_id} (dtype: {base_model.dtype})")
             return model_with_adapter
 
         except Exception as e:
@@ -721,82 +726,65 @@ class ModelManager:
             )
             logger.info(f"Set default chat template for {model_id}")
 
-        # Always set stop tokens to prevent multi-turn hallucination
-        # This is critical even for models with native chat templates
+        # Set stop token IDs for generation (used with model.generate's eos_token_id parameter)
+        # This is simpler and more reliable than string-based stopping criteria
+        if not hasattr(tokenizer, "stop_token_ids") or tokenizer.stop_token_ids is None:
+            tokenizer.stop_token_ids = self._get_stop_token_ids(tokenizer, model_id)
+
+        # Also keep stop token strings for streaming response trimming
+        # (used to detect and remove stop tokens from streamed output)
         if not hasattr(tokenizer, "stop_tokens") or tokenizer.stop_tokens is None:
-            # Detect model-specific stop tokens based on chat template or model name
-            stop_tokens = self._get_stop_tokens_for_model(tokenizer, model_id)
+            stop_tokens = []
+            for token_id in tokenizer.stop_token_ids:
+                try:
+                    token_str = tokenizer.decode([token_id], skip_special_tokens=False)
+                    if token_str:
+                        stop_tokens.append(token_str)
+                except:
+                    pass
+            tokenizer.stop_tokens = stop_tokens if stop_tokens else []
+            logger.info(f"Stop token strings for {model_id}: {tokenizer.stop_tokens}")
 
-            # Validate that stop tokens are in the tokenizer's vocabulary
-            validated_stop_tokens = []
-            for stop_token in stop_tokens:
-                # Try to encode the stop token
-                encoded = tokenizer.encode(stop_token, add_special_tokens=False)
-                if encoded:
-                    validated_stop_tokens.append(stop_token)
-                    logger.debug(f"Stop token '{stop_token}' encoded as {encoded}")
-                else:
-                    logger.warning(f"Stop token '{stop_token}' not in vocabulary, skipping")
-
-            # If no valid stop tokens, use a safer default
-            if not validated_stop_tokens:
-                logger.warning(f"No valid stop tokens found for {model_id}, using fallback")
-                validated_stop_tokens = ["\n\n", "\n"]
-
-            tokenizer.stop_tokens = validated_stop_tokens
-            logger.info(f"Set stop tokens for {model_id}: {tokenizer.stop_tokens}")
-
-    def _get_stop_tokens_for_model(self, tokenizer, model_id: str) -> list:
+    def _get_stop_token_ids(self, tokenizer, model_id: str) -> list:
         """
-        Determine appropriate stop tokens based on model type and chat template.
+        Get stop token IDs from tokenizer.
+
+        The model.generate() method's eos_token_id parameter accepts a list of token IDs.
+        This method collects all relevant stop tokens from the tokenizer.
 
         Args:
-            tokenizer: Tokenizer with chat template
-            model_id: Model identifier
+            tokenizer: Tokenizer
+            model_id: Model identifier for logging
 
         Returns:
-            List of stop token strings
+            List of token IDs that should trigger stopping
         """
-        # First, check if tokenizer has additional_special_tokens that might include stop tokens
-        stop_tokens = []
-        if hasattr(tokenizer, "additional_special_tokens"):
-            # Look for common stop token patterns in special tokens
+        stop_token_ids = []
+
+        # Start with the primary EOS token
+        if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:
+            # For some models (like Llama 3), eos_token_id is already a list
+            if isinstance(tokenizer.eos_token_id, list):
+                stop_token_ids.extend(tokenizer.eos_token_id)
+            else:
+                stop_token_ids.append(tokenizer.eos_token_id)
+
+        # Add additional special tokens that indicate "end" or "stop"
+        if hasattr(tokenizer, "additional_special_tokens") and tokenizer.additional_special_tokens:
             for token in tokenizer.additional_special_tokens:
-                if "im_end" in token or "end_of_turn" in token or token == "</s>":
-                    stop_tokens.append(token)
+                # Look for tokens that contain "end" or "stop" (case-insensitive)
+                if any(indicator in token.lower() for indicator in ["end", "stop", "eos"]):
+                    try:
+                        token_id = tokenizer.convert_tokens_to_ids(token)
+                        # Verify it's a valid token ID (not unk_token)
+                        if token_id != tokenizer.unk_token_id and token_id not in stop_token_ids:
+                            stop_token_ids.append(token_id)
+                            logger.debug(f"Added stop token '{token}' (ID: {token_id})")
+                    except:
+                        pass
 
-        # If we found special tokens, use them
-        if stop_tokens:
-            logger.info(f"Found stop tokens in special tokens for {model_id}: {stop_tokens}")
-            return stop_tokens
-
-        # Check if model has a chat template we can analyze
-        if hasattr(tokenizer, "chat_template") and tokenizer.chat_template:
-            chat_template = tokenizer.chat_template
-
-            # Qwen models use ChatML format with <|im_start|> and <|im_end|> markers
-            # The model generates: <|im_start|>assistant\nResponse<|im_end|>
-            # So we need to stop when we see <|im_end|> (marks end of assistant turn)
-            if "im_start" in chat_template or "qwen" in model_id.lower():
-                return ["<|im_end|>"]
-
-            # Gemma and similar models often use specific role markers
-            if "gemma" in model_id.lower():
-                # Gemma uses turn-based markers
-                return ["<start_of_turn>", "<end_of_turn>"]
-
-            # Llama-style chat templates
-            if "[INST]" in chat_template or "llama" in model_id.lower():
-                return ["[/INST]"]
-
-            # Check for common user/assistant markers in template
-            if "user" in chat_template.lower() and "assistant" in chat_template.lower():
-                if "<|user|>" in chat_template or "<|assistant|>" in chat_template:
-                    return ["<|user|>", "<|assistant|>"]
-
-        # Generic fallback stop tokens that work for most chat formats
-        # Include variations to catch the start of a new turn
-        return ["User:", "\nUser:", "\n\nUser:", "user:", "\nuser:"]
+        logger.info(f"Stop token IDs for {model_id}: {stop_token_ids}")
+        return stop_token_ids
 
     def _load_model_to_device(self, local_path: str) -> torch.nn.Module:
         """
@@ -910,6 +898,12 @@ class ModelManager:
                     # Download adapter
                     adapter_path = await self._download_adapter(model_id)
 
+                    # Use base model's tokenizer for adapters
+                    # LoRA adapters only modify model weights, not tokenization
+                    # The adapter was trained with the base model's tokenizer, so use that
+                    tokenizer = base_model_dict["tokenizer"]
+                    logger.info(f"Using base model tokenizer for adapter: {base_model_id}")
+
                     # Apply adapter to base model
                     model_with_adapter = await self._load_and_apply_adapter(
                         model_id,
@@ -923,7 +917,7 @@ class ModelManager:
                     # Cache the fine-tuned model
                     self.models[model_id] = {
                         "model": model_with_adapter,
-                        "tokenizer": base_model_dict["tokenizer"],  # Reuse base tokenizer
+                        "tokenizer": tokenizer,  # Use adapter's tokenizer, not base
                         "device": config.DEVICE,
                         "memory_gb": adapter_memory,  # Only count adapter memory
                         "base_model_id": base_model_id,  # Track which base model this uses

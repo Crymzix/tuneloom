@@ -9,7 +9,7 @@ from threading import Thread
 import torch
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from transformers import TextIteratorStreamer, StoppingCriteriaList
+from transformers import TextIteratorStreamer, LogitsProcessorList
 
 from ..config import config
 from ..models.requests import ChatCompletionRequest, CompletionRequest, Message
@@ -24,7 +24,7 @@ from ..models.responses import (
     StreamCompletionChoice,
     Usage,
 )
-from ..utils.stopping_criteria import StopOnTokens
+from ..utils.logits_processors import NumericalStabilityLogitsProcessor
 from ..utils.logging import get_logger
 from .model_manager import ModelManager
 
@@ -117,7 +117,7 @@ class InferenceEngine:
         return stop_token_sequences
 
     def _prepare_generation_kwargs(
-        self, inputs, request, tokenizer, stop_token_sequences=None
+        self, inputs, request, tokenizer
     ) -> dict:
         """
         Prepare kwargs for model.generate().
@@ -126,11 +126,18 @@ class InferenceEngine:
             inputs: Tokenized inputs
             request: Request with generation parameters
             tokenizer: Tokenizer
-            stop_token_sequences: Optional stop token sequences
 
         Returns:
             Dictionary of generation kwargs
         """
+        # Use stop token IDs from tokenizer if available (simpler and more reliable)
+        # The eos_token_id parameter accepts a list of token IDs
+        if hasattr(tokenizer, "stop_token_ids") and tokenizer.stop_token_ids:
+            eos_token_id = tokenizer.stop_token_ids
+        else:
+            # Fallback to default eos_token_id
+            eos_token_id = tokenizer.eos_token_id
+
         gen_kwargs = {
             "input_ids": inputs.input_ids,
             "attention_mask": inputs.attention_mask,
@@ -139,16 +146,17 @@ class InferenceEngine:
             "do_sample": request.temperature > 0,
             "top_p": request.top_p,
             "pad_token_id": tokenizer.pad_token_id or tokenizer.eos_token_id,
-            "eos_token_id": tokenizer.eos_token_id,
+            "eos_token_id": eos_token_id,  # Can be a list of token IDs
             "use_cache": True,
         }
 
-        # Add stopping criteria if we have stop sequences
-        if stop_token_sequences:
-            stopping_criteria = StoppingCriteriaList(
-                [StopOnTokens(stop_token_sequences, inputs.input_ids.shape[1])]
-            )
-            gen_kwargs["stopping_criteria"] = stopping_criteria
+        # Add numerical stability logits processor
+        # Only processes logits when inf/nan values are detected
+        # Otherwise passes through unchanged to avoid corrupting the distribution
+        logits_processors = LogitsProcessorList([
+            NumericalStabilityLogitsProcessor()
+        ])
+        gen_kwargs["logits_processor"] = logits_processors
 
         # Add sampling safety parameters
         if gen_kwargs["do_sample"]:
@@ -165,7 +173,7 @@ class InferenceEngine:
 
         return gen_kwargs
 
-    def _handle_cuda_error(self, model_data: dict, model_id: str) -> None:
+    def _handle_cuda_error(self, model_id: str) -> None:
         """
         Handle CUDA errors by cleaning up GPU memory and unloading the corrupted model.
 
@@ -176,7 +184,6 @@ class InferenceEngine:
         3. Forcing garbage collection
 
         Args:
-            model_data: Model data dictionary
             model_id: Model identifier to unload
         """
         try:
@@ -227,14 +234,12 @@ class InferenceEngine:
             tokenizer, skip_prompt=True, skip_special_tokens=True
         )
 
-        # Prepare stop sequences
+        # Prepare stop sequences for streaming output trimming
+        # (stop tokens are now handled via eos_token_id in generation kwargs)
         stop_strings = self._prepare_stop_sequences(request, tokenizer)
-        stop_token_sequences = self._encode_stop_sequences(stop_strings, tokenizer)
 
         # Generation kwargs
-        gen_kwargs = self._prepare_generation_kwargs(
-            inputs, request, tokenizer, stop_token_sequences
-        )
+        gen_kwargs = self._prepare_generation_kwargs(inputs, request, tokenizer)
         gen_kwargs["streamer"] = streamer
 
         # Start generation in thread with error handling
@@ -341,7 +346,7 @@ class InferenceEngine:
                 # If CUDA error, clear cache and potentially unload model
                 if "CUDA" in str(error) or "cuda" in str(error):
                     logger.error("CUDA error detected - cleaning up GPU memory")
-                    self._handle_cuda_error(model_data, request.model)
+                    self._handle_cuda_error(request.model)
 
                 # Re-raise the error
                 raise error
@@ -398,14 +403,12 @@ class InferenceEngine:
                 )
                 prompt_tokens = inputs.input_ids.shape[1]
 
-                # Prepare stop sequences
+                # Prepare stop sequences for output trimming
+                # (stop tokens are now handled via eos_token_id in generation kwargs)
                 stop_strings = self._prepare_stop_sequences(request, tokenizer)
-                stop_token_sequences = self._encode_stop_sequences(stop_strings, tokenizer)
 
                 # Generation with error handling
-                gen_kwargs = self._prepare_generation_kwargs(
-                    inputs, request, tokenizer, stop_token_sequences
-                )
+                gen_kwargs = self._prepare_generation_kwargs(inputs, request, tokenizer)
 
                 try:
                     with torch.no_grad():
@@ -414,7 +417,7 @@ class InferenceEngine:
                     # Handle CUDA errors
                     if "CUDA" in str(e) or "cuda" in str(e):
                         logger.error(f"CUDA error during generation: {e}")
-                        self._handle_cuda_error(model_data, request.model)
+                        self._handle_cuda_error(request.model)
                     raise
 
                 # Decode
@@ -535,7 +538,7 @@ class InferenceEngine:
                 # If CUDA error, clean up
                 if "CUDA" in str(error) or "cuda" in str(error):
                     logger.error("CUDA error detected - cleaning up GPU memory")
-                    self._handle_cuda_error(model_data, request.model)
+                    self._handle_cuda_error(request.model)
 
                 raise error
 
@@ -610,7 +613,7 @@ class InferenceEngine:
                     # Handle CUDA errors
                     if "CUDA" in str(e) or "cuda" in str(e):
                         logger.error(f"CUDA error during generation: {e}")
-                        self._handle_cuda_error(model_data, request.model)
+                        self._handle_cuda_error(request.model)
                     raise
 
                 # Decode
