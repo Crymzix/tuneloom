@@ -32,7 +32,10 @@ class ModelManager:
         # Legacy cache for base models and fine-tuned models
         self.models: Dict[str, dict] = {}
         self.model_access_times: Dict[str, float] = {}
-        self.loading_locks: Dict[str, asyncio.Lock] = {}
+
+        # Track which models are currently being loaded to prevent request pile-up
+        self.models_loading: set = set()
+        self.base_models_loading: set = set()
 
         # Two-tier cache: base models and adapters
         self.base_models: Dict[str, dict] = {}  # Cache base models separately
@@ -311,6 +314,29 @@ class ModelManager:
 
         # Try mounted volume first
         if config.MOUNT_PATH:
+            # For custom fine-tuned models (no slashes), check versioned path
+            if "/" not in model_id:
+                try:
+                    version_label = self.version_resolver.get_active_version_label(model_id)
+                    if version_label:
+                        # Check versioned path: models/{modelName}/{versionLabel}/training_config.json
+                        versioned_config_path = os.path.join(
+                            config.MOUNT_PATH,
+                            config.GCS_MODEL_PREFIX.rstrip("/"),
+                            model_id,
+                            version_label,
+                            config_filename
+                        )
+                        if os.path.exists(versioned_config_path):
+                            logger.info(f"Loading training config from versioned mounted volume: {versioned_config_path}")
+                            with open(versioned_config_path, 'r') as f:
+                                config_dict = json.load(f)
+                                self.model_configs[model_id] = config_dict
+                                return config_dict
+                except Exception as e:
+                    logger.warning(f"Failed to resolve version for mounted training config {model_id}: {e}")
+
+            # For base models or fallback, check non-versioned path
             formatted_model_id = model_id.replace("/", "-")
             mounted_config_path = os.path.join(
                 config.MOUNT_PATH,
@@ -379,6 +405,26 @@ class ModelManager:
         """
         # Check mounted volume first
         if config.MOUNT_PATH:
+            # For custom fine-tuned models (no slashes), check versioned path
+            if "/" not in model_id:
+                try:
+                    version_label = self.version_resolver.get_active_version_label(model_id)
+                    if version_label:
+                        # Check versioned path: models/{modelName}/{versionLabel}/adapter
+                        versioned_adapter_path = os.path.join(
+                            config.MOUNT_PATH,
+                            config.GCS_MODEL_PREFIX.rstrip("/"),
+                            model_id,
+                            version_label,
+                            "adapter"
+                        )
+                        if os.path.exists(versioned_adapter_path) and os.path.isdir(versioned_adapter_path):
+                            logger.info(f"Found versioned adapter in mounted volume: {versioned_adapter_path}")
+                            return versioned_adapter_path
+                except Exception as e:
+                    logger.warning(f"Failed to resolve version for mounted adapter {model_id}: {e}")
+
+            # For base models or fallback, check non-versioned path
             formatted_model_id = model_id.replace("/", "-")
             mounted_adapter_path = os.path.join(
                 config.MOUNT_PATH,
@@ -471,6 +517,9 @@ class ModelManager:
 
         Returns:
             Dictionary containing model, tokenizer, and device info
+
+        Raises:
+            HTTPException: 503 if model is currently being loaded by another request
         """
         # Check if base model is already loaded
         if base_model_id in self.base_models:
@@ -478,51 +527,68 @@ class ModelManager:
             logger.info(f"Using cached base model: {base_model_id}")
             return self.base_models[base_model_id]
 
+        # Check if base model is currently being loaded by another request
+        if base_model_id in self.base_models_loading:
+            logger.info(f"Base model {base_model_id} is currently being loaded by another request")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Model {base_model_id} is currently loading. Please retry in 30 seconds.",
+                headers={"Retry-After": "30"}
+            )
+
         logger.info(f"Loading base model: {base_model_id}")
 
-        # Download from GCS
-        local_path = await self._download_from_gcs(base_model_id)
+        # Mark model as loading
+        self.base_models_loading.add(base_model_id)
 
-        # Estimate memory for base model
-        if config.DEVICE == "cuda" and torch.cuda.is_bf16_supported():
-            precision = "bf16"
-        elif config.DEVICE == "mps":
-            precision = "fp32"
-        else:
-            precision = "fp32"
+        try:
+            # Download from GCS
+            local_path = await self._download_from_gcs(base_model_id)
 
-        estimated_memory = memory.estimate_model_memory(base_model_id, precision)
-        logger.info(f"Estimated base model memory: {memory.format_memory_size(estimated_memory)}")
+            # Estimate memory for base model
+            if config.DEVICE == "cuda" and torch.cuda.is_bf16_supported():
+                precision = "bf16"
+            elif config.DEVICE == "mps":
+                precision = "fp32"
+            else:
+                precision = "fp32"
 
-        # Evict models if needed
-        self._evict_for_memory(estimated_memory)
+            estimated_memory = memory.estimate_model_memory(base_model_id, precision)
+            logger.info(f"Estimated base model memory: {memory.format_memory_size(estimated_memory)}")
 
-        # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            local_path, local_files_only=True, trust_remote_code=True
-        )
+            # Evict models if needed
+            self._evict_for_memory(estimated_memory)
 
-        # Configure tokenizer
-        self._configure_tokenizer(tokenizer, base_model_id)
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                local_path, local_files_only=True, trust_remote_code=True
+            )
 
-        # Load model
-        model = self._load_model_to_device(local_path)
+            # Configure tokenizer
+            self._configure_tokenizer(tokenizer, base_model_id)
 
-        # Calculate actual memory usage
-        actual_memory = memory.get_model_actual_memory(model)
-        logger.info(f"Actual base model memory: {memory.format_memory_size(actual_memory)}")
+            # Load model
+            model = self._load_model_to_device(local_path)
 
-        # Cache base model
-        self.base_models[base_model_id] = {
-            "model": model,
-            "tokenizer": tokenizer,
-            "device": config.DEVICE,
-            "memory_gb": actual_memory,
-        }
-        self.base_model_access_times[base_model_id] = time.time()
+            # Calculate actual memory usage
+            actual_memory = memory.get_model_actual_memory(model)
+            logger.info(f"Actual base model memory: {memory.format_memory_size(actual_memory)}")
 
-        logger.info(f"Base model {base_model_id} loaded successfully")
-        return self.base_models[base_model_id]
+            # Cache base model
+            self.base_models[base_model_id] = {
+                "model": model,
+                "tokenizer": tokenizer,
+                "device": config.DEVICE,
+                "memory_gb": actual_memory,
+            }
+            self.base_model_access_times[base_model_id] = time.time()
+
+            logger.info(f"Base model {base_model_id} loaded successfully")
+            return self.base_models[base_model_id]
+
+        finally:
+            # Always remove from loading set, even if loading failed
+            self.base_models_loading.discard(base_model_id)
 
     async def _load_and_apply_adapter(
         self, model_id: str, base_model: torch.nn.Module, adapter_path: str
@@ -604,8 +670,6 @@ class ModelManager:
 
             del self.models[model_id]
             del self.model_access_times[model_id]
-            if model_id in self.loading_locks:
-                del self.loading_locks[model_id]
 
             memory.clear_gpu_cache()
             return
@@ -623,8 +687,6 @@ class ModelManager:
 
             del self.models[model_id]
             del self.model_access_times[model_id]
-            if model_id in self.loading_locks:
-                del self.loading_locks[model_id]
 
             memory.clear_gpu_cache()
             return
@@ -819,6 +881,11 @@ class ModelManager:
                 # Fallback to fp32 if bfloat16 not supported (unlikely on modern GPUs)
                 logger.warning("bfloat16 not supported, falling back to fp32")
                 load_kwargs["torch_dtype"] = torch.float32
+
+            # Enable faster safetensors loading with GPU optimizations
+            os.environ["SAFETENSORS_FAST_GPU"] = "1"
+            logger.info("Enabled SAFETENSORS_FAST_GPU for faster model loading")
+
             load_kwargs["device_map"] = "auto"
             model = AutoModelForCausalLM.from_pretrained(local_path, **load_kwargs)
         else:
@@ -854,7 +921,7 @@ class ModelManager:
             Dictionary containing model, tokenizer, and device info
 
         Raises:
-            HTTPException: If model loading fails
+            HTTPException: If model loading fails or if model is currently being loaded (503)
         """
         # Check if model is already loaded
         if model_id in self.models:
@@ -862,125 +929,130 @@ class ModelManager:
             logger.info(f"Using cached model: {model_id}")
             return self.models[model_id]
 
-        # Create lock for this model if it doesn't exist
-        if model_id not in self.loading_locks:
-            self.loading_locks[model_id] = asyncio.Lock()
+        # Check if model is currently being loaded by another request
+        if model_id in self.models_loading:
+            logger.info(f"Model {model_id} is currently being loaded by another request")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Model {model_id} is currently loading. Please retry in 30 seconds.",
+                headers={"Retry-After": "30"}
+            )
 
-        # Acquire lock to prevent duplicate loading
-        async with self.loading_locks[model_id]:
-            # Double-check if model was loaded while waiting
-            if model_id in self.models:
+        logger.info(f"Loading model: {model_id}")
+
+        # Mark model as loading
+        self.models_loading.add(model_id)
+
+        try:
+            # Check if this is a fine-tuned model
+            is_fine_tuned = await self._is_fine_tuned_model(model_id)
+
+            if is_fine_tuned:
+                # Load fine-tuned model with adapter
+                logger.info(f"Detected fine-tuned model: {model_id}")
+
+                # Get training config to find base model
+                training_config = await self._load_training_config(model_id)
+                base_model_id = training_config.get("base_model")
+
+                if not base_model_id:
+                    raise ValueError(f"Training config for {model_id} missing 'base_model' field")
+
+                logger.info(f"Base model for {model_id}: {base_model_id}")
+
+                # Load base model (will use cache if already loaded)
+                base_model_dict = await self._load_base_model(base_model_id)
+
+                # Download adapter
+                adapter_path = await self._download_adapter(model_id)
+
+                # Use base model's tokenizer for adapters
+                # LoRA adapters only modify model weights, not tokenization
+                # The adapter was trained with the base model's tokenizer, so use that
+                tokenizer = base_model_dict["tokenizer"]
+                logger.info(f"Using base model tokenizer for adapter: {base_model_id}")
+
+                # Apply adapter to base model
+                model_with_adapter = await self._load_and_apply_adapter(
+                    model_id,
+                    base_model_dict["model"],
+                    adapter_path
+                )
+
+                # Estimate adapter memory (adapters are tiny, ~50MB)
+                adapter_memory = 0.05  # Approximate 50MB
+
+                # Cache the fine-tuned model
+                self.models[model_id] = {
+                    "model": model_with_adapter,
+                    "tokenizer": tokenizer,  # Use adapter's tokenizer, not base
+                    "device": config.DEVICE,
+                    "memory_gb": adapter_memory,  # Only count adapter memory
+                    "base_model_id": base_model_id,  # Track which base model this uses
+                }
                 self.model_access_times[model_id] = time.time()
+
+                logger.info(f"Fine-tuned model {model_id} loaded successfully with adapter")
                 return self.models[model_id]
 
-            logger.info(f"Loading model: {model_id}")
+            else:
+                # Load as base model (standard model loading)
+                logger.info(f"Loading as base model: {model_id}")
 
-            try:
-                # Check if this is a fine-tuned model
-                is_fine_tuned = await self._is_fine_tuned_model(model_id)
+                # Download from GCS
+                local_path = await self._download_from_gcs(model_id)
+                logger.info(f"Model {model_id} downloaded to {local_path}")
 
-                if is_fine_tuned:
-                    # Load fine-tuned model with adapter
-                    logger.info(f"Detected fine-tuned model: {model_id}")
-
-                    # Get training config to find base model
-                    training_config = await self._load_training_config(model_id)
-                    base_model_id = training_config.get("base_model")
-
-                    if not base_model_id:
-                        raise ValueError(f"Training config for {model_id} missing 'base_model' field")
-
-                    logger.info(f"Base model for {model_id}: {base_model_id}")
-
-                    # Load base model (will use cache if already loaded)
-                    base_model_dict = await self._load_base_model(base_model_id)
-
-                    # Download adapter
-                    adapter_path = await self._download_adapter(model_id)
-
-                    # Use base model's tokenizer for adapters
-                    # LoRA adapters only modify model weights, not tokenization
-                    # The adapter was trained with the base model's tokenizer, so use that
-                    tokenizer = base_model_dict["tokenizer"]
-                    logger.info(f"Using base model tokenizer for adapter: {base_model_id}")
-
-                    # Apply adapter to base model
-                    model_with_adapter = await self._load_and_apply_adapter(
-                        model_id,
-                        base_model_dict["model"],
-                        adapter_path
-                    )
-
-                    # Estimate adapter memory (adapters are tiny, ~50MB)
-                    adapter_memory = 0.05  # Approximate 50MB
-
-                    # Cache the fine-tuned model
-                    self.models[model_id] = {
-                        "model": model_with_adapter,
-                        "tokenizer": tokenizer,  # Use adapter's tokenizer, not base
-                        "device": config.DEVICE,
-                        "memory_gb": adapter_memory,  # Only count adapter memory
-                        "base_model_id": base_model_id,  # Track which base model this uses
-                    }
-                    self.model_access_times[model_id] = time.time()
-
-                    logger.info(f"Fine-tuned model {model_id} loaded successfully with adapter")
-                    return self.models[model_id]
-
+                # Estimate model memory requirement
+                if config.DEVICE == "cuda" and torch.cuda.is_bf16_supported():
+                    precision = "bf16"
+                elif config.DEVICE == "mps":
+                    precision = "fp32"
                 else:
-                    # Load as base model (standard model loading)
-                    logger.info(f"Loading as base model: {model_id}")
+                    precision = "fp32"
 
-                    # Download from GCS
-                    local_path = await self._download_from_gcs(model_id)
-                    logger.info(f"Model {model_id} downloaded to {local_path}")
+                estimated_memory = memory.estimate_model_memory(model_id, precision)
+                logger.info(f"Estimated memory requirement: {memory.format_memory_size(estimated_memory)}")
 
-                    # Estimate model memory requirement
-                    if config.DEVICE == "cuda" and torch.cuda.is_bf16_supported():
-                        precision = "bf16"
-                    elif config.DEVICE == "mps":
-                        precision = "fp32"
-                    else:
-                        precision = "fp32"
+                # Evict models if needed to make room
+                self._evict_for_memory(estimated_memory)
 
-                    estimated_memory = memory.estimate_model_memory(model_id, precision)
-                    logger.info(f"Estimated memory requirement: {memory.format_memory_size(estimated_memory)}")
-
-                    # Evict models if needed to make room
-                    self._evict_for_memory(estimated_memory)
-
-                    # Load tokenizer
-                    tokenizer = AutoTokenizer.from_pretrained(
-                        local_path, local_files_only=True, trust_remote_code=True
-                    )
-
-                    # Configure tokenizer
-                    self._configure_tokenizer(tokenizer, model_id)
-
-                    # Load model
-                    model = self._load_model_to_device(local_path)
-
-                    # Calculate actual memory usage
-                    actual_memory = memory.get_model_actual_memory(model)
-                    logger.info(f"Actual memory usage: {memory.format_memory_size(actual_memory)}")
-
-                    # Cache model with memory tracking
-                    self.models[model_id] = {
-                        "model": model,
-                        "tokenizer": tokenizer,
-                        "device": config.DEVICE,
-                        "memory_gb": actual_memory,
-                    }
-                    self.model_access_times[model_id] = time.time()
-
-                    logger.info(f"Model {model_id} loaded successfully")
-                    return self.models[model_id]
-
-            except Exception as e:
-                logger.error(f"Failed to load model {model_id}: {e}")
-                raise HTTPException(
-                    status_code=500, detail=f"Failed to load model {model_id}: {str(e)}"
+                # Load tokenizer
+                tokenizer = AutoTokenizer.from_pretrained(
+                    local_path, local_files_only=True, trust_remote_code=True
                 )
+
+                # Configure tokenizer
+                self._configure_tokenizer(tokenizer, model_id)
+
+                # Load model
+                model = self._load_model_to_device(local_path)
+
+                # Calculate actual memory usage
+                actual_memory = memory.get_model_actual_memory(model)
+                logger.info(f"Actual memory usage: {memory.format_memory_size(actual_memory)}")
+
+                # Cache model with memory tracking
+                self.models[model_id] = {
+                    "model": model,
+                    "tokenizer": tokenizer,
+                    "device": config.DEVICE,
+                    "memory_gb": actual_memory,
+                }
+                self.model_access_times[model_id] = time.time()
+
+                logger.info(f"Model {model_id} loaded successfully")
+                return self.models[model_id]
+
+        except Exception as e:
+            logger.error(f"Failed to load model {model_id}: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to load model {model_id}: {str(e)}"
+            )
+
+        finally:
+            # Always remove from loading set, even if loading failed
+            self.models_loading.discard(model_id)
 
     def list_loaded_models(self) -> list:
         """
